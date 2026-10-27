@@ -1,0 +1,9 @@
+.env
+data/
+*.db
+__pycache__/
+.pytest_cache/
+.venv/
+eval/audio/
+eval/results-*.json
+.DS_Store

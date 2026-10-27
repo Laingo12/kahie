@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="mg">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1f2a44">
+  <title>Kahie</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">Kahie <span class="tag">cahier vocal</span></div>
+    <div id="net" class="net" title="Réseau">●</div>
+  </header>
+
+  <main>
+    <!-- 1. Record -->
+    <section id="screen-record" class="screen active" aria-label="Raketo">
+      <p class="hint">Tsindrio ary mitenena — malagasy, frantsay na mifangaro.</p>
+      <button id="mic" class="mic" aria-label="Raketo feo">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V22h2v-3.08A7 7 0 0 0 19 12h-2Z"/></svg>
+      </button>
+      <div id="rec-state" class="rec-state">Vonona</div>
+      <details class="typed">
+        <summary>Soraty (test)</summary>
+        <form id="typed-form">
+          <input id="typed" placeholder="Rabe naka 3 kapoaka vary, nandoa 2000 Ar">
+          <button>Alefa</button>
+        </form>
+      </details>
+      <label class="photo-btn">
+        <input id="photo" type="file" accept="image/*" capture="environment" hidden>
+        📷 Sary ny kahie (import des dettes)
+      </label>
+      <div id="queue" class="queue" hidden></div>
+    </section>
+
+    <!-- 2. Confirmation card -->
+    <section id="screen-confirm" class="screen" aria-label="Fanamafisana">
+      <div class="ears">
+        <div><span class="ear-label">Sofina 1 · Voice Transcribe</span><p id="ear1"></p></div>
+        <div><span class="ear-label">Sofina 2 · Spark</span><p id="ear2"></p></div>
+      </div>
+      <div id="card" class="card"></div>
+      <div class="actions">
+        <button id="btn-fix" class="ghost">Ovaina</button>
+        <button id="btn-ok" class="primary">✓ Marina</button>
+      </div>
+    </section>
+
+    <!-- 3. Dashboard -->
+    <section id="screen-dash" class="screen" aria-label="Tabilao">
+      <div class="kpis">
+        <div class="kpi"><span>Varotra androany</span><b id="k-sales">–</b></div>
+        <div class="kpi"><span>Trosa rehetra</span><b id="k-debt">–</b></div>
+      </div>
+      <h3>Trosa</h3><ul id="debts" class="list"></ul>
+      <h3>Tahiry ambany</h3><ul id="low" class="list"></ul>
+      <h3>Diary</h3><ul id="journal" class="list journal"></ul>
+    </section>
+
+    <!-- 4. Statement -->
+    <section id="screen-statement" class="screen" aria-label="Tatitra">
+      <div class="statement" id="statement"></div>
+    </section>
+  </main>
+
+  <nav class="tabs">
+    <button data-screen="record" class="on">🎙️<span>Raketo</span></button>
+    <button data-screen="dash">📒<span>Tabilao</span></button>
+    <button data-screen="statement">🧾<span>Tatitra</span></button>
+  </nav>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>

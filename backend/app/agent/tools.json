@@ -1,0 +1,81 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "record_sale",
+      "description": "Enregistre une vente. Si paid < total, le reste devient une dette du client.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "customer": {"type": ["string", "null"], "description": "Nom du client, null si client de passage"},
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "product": {"type": "string"},
+                "qty": {"type": "number"},
+                "unit_price": {"type": ["integer", "null"], "description": "Prix unitaire en Ar si dit, sinon null"}
+              },
+              "required": ["product", "qty"]
+            }
+          },
+          "paid": {"type": ["integer", "null"], "description": "Montant payé en Ar, null si non dit (= tout payé)"}
+        },
+        "required": ["items"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "update_stock",
+      "description": "Ajuste le stock hors vente : réapprovisionnement ou perte.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "product": {"type": "string"},
+          "delta": {"type": "number", "description": "Positif = entrée (réapprovisionnement), négatif = perte"},
+          "reason": {"type": "string", "enum": ["restock", "loss"]}
+        },
+        "required": ["product", "delta", "reason"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "record_debt",
+      "description": "Ajoute une dette sans vente (ex. import du cahier papier).",
+      "parameters": {
+        "type": "object",
+        "properties": {"customer": {"type": "string"}, "amount": {"type": "integer"}, "reason": {"type": "string"}},
+        "required": ["customer", "amount"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "record_payment",
+      "description": "Le client rembourse tout ou partie de sa dette.",
+      "parameters": {
+        "type": "object",
+        "properties": {"customer": {"type": "string"}, "amount": {"type": "integer"}},
+        "required": ["customer", "amount"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "ask_clarification",
+      "description": "À utiliser quand produit, client, quantité ou montant est incertain. Question courte en malgache.",
+      "parameters": {
+        "type": "object",
+        "properties": {"question": {"type": "string"}},
+        "required": ["question"]
+      }
+    }
+  }
+]

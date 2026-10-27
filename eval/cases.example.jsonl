@@ -1,0 +1,4 @@
+{"id": "mg-001", "lang": "mg", "reference": "Rabe naka 3 kapoaka vary, nandoa 2000 Ar", "expected": [{"kind": "sale", "product": "vary", "qty": 3, "customer": "Rabe", "total": 3000}, {"kind": "debt", "customer": "Rabe", "amount": 1000}]}
+{"id": "mx-001", "lang": "mix", "reference": "Soa a pris 2 kapoaka siramamy, nandoa 1600 Ar", "expected": [{"kind": "sale", "product": "siramamy", "qty": 2, "customer": "Soa", "total": 1600}]}
+{"id": "fr-001", "lang": "fr", "reference": "Naivo a acheté 4 savon", "expected": [{"kind": "sale", "product": "savony", "qty": 4, "customer": "Naivo", "total": 6000}]}
+{"id": "mg-002", "lang": "mg", "reference": "Bodo naka zavatra", "expected": []}

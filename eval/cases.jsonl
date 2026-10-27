@@ -1,0 +1,60 @@
+{"id": "mg-001", "lang": "mg", "reference": "Rabe naka telo kapoaka vary, nandoa roa arivo Ariary.", "expected": [{"kind": "sale", "customer": "Rabe", "product": "vary", "qty": 3.0, "total": 3000}, {"kind": "debt", "customer": "Rabe", "amount": 1000}]}
+{"id": "mg-002", "lang": "mg", "reference": "Soa nividy siramamy kapoaka roa, voaloa avokoa.", "expected": [{"kind": "sale", "customer": "Soa", "product": "siramamy", "qty": 2.0, "total": 1600}]}
+{"id": "mg-003", "lang": "mg", "reference": "Naivo naka menaka iray litatra, mbola tsy nandoa.", "expected": [{"kind": "sale", "customer": "Naivo", "product": "menaka", "qty": 1.0, "total": 9000}, {"kind": "debt", "customer": "Naivo", "amount": 9000}]}
+{"id": "mg-004", "lang": "mg", "reference": "Bodo nividy savony efatra, nandoa enina arivo.", "expected": [{"kind": "sale", "customer": "Bodo", "product": "savony", "qty": 4.0, "total": 6000}]}
+{"id": "mg-005", "lang": "mg", "reference": "Mofo folo no lafo tamin'ny olona tsy fantatra.", "expected": [{"kind": "sale", "customer": null, "product": "mofo", "qty": 10.0, "total": 3000}]}
+{"id": "mg-006", "lang": "mg", "reference": "Rabe nanefa trosa arivo Ariary.", "expected": [{"kind": "payment", "customer": "Rabe", "amount": 1000}]}
+{"id": "mg-007", "lang": "mg", "reference": "Soa nandoa ny trosany, telo arivo sy dimanjato.", "expected": [{"kind": "payment", "customer": "Soa", "amount": 3500}]}
+{"id": "mg-008", "lang": "mg", "reference": "Tonga ny vary, kapoaka dimampolo.", "expected": [{"kind": "stock", "product": "vary", "delta": 50}]}
+{"id": "mg-009", "lang": "mg", "reference": "Simba ny mofo dimy.", "expected": [{"kind": "stock", "product": "mofo", "delta": -5}]}
+{"id": "mg-010", "lang": "mg", "reference": "Naivo naka vary roa kapoaka sy siramamy iray kapoaka, nandoa arivo.", "expected": [{"kind": "sale", "customer": "Naivo", "product": "vary", "qty": 2.0, "total": 2000}, {"kind": "sale", "customer": "Naivo", "product": "siramamy", "qty": 1.0, "total": 800}, {"kind": "debt", "customer": "Naivo", "amount": 1800}]}
+{"id": "mg-011", "lang": "mg", "reference": "Bodo nindrana roa arivo Ariary.", "expected": [{"kind": "debt", "customer": "Bodo", "amount": 2000}]}
+{"id": "mg-012", "lang": "mg", "reference": "Rabe naka mofo enina, nandoa arivo sy valonjato.", "expected": [{"kind": "sale", "customer": "Rabe", "product": "mofo", "qty": 6.0, "total": 1800}]}
+{"id": "mg-013", "lang": "mg", "reference": "Soa naka siramamy dimy kapoaka, nandoa telo arivo.", "expected": [{"kind": "sale", "customer": "Soa", "product": "siramamy", "qty": 5.0, "total": 4000}, {"kind": "debt", "customer": "Soa", "amount": 1000}]}
+{"id": "mg-014", "lang": "mg", "reference": "Nampiditra savony roapolo.", "expected": [{"kind": "stock", "product": "savony", "delta": 20}]}
+{"id": "mg-015", "lang": "mg", "reference": "Lalao naka vary efatra kapoaka, mbola tsy nandoa.", "expected": [{"kind": "sale", "customer": "Lalao", "product": "vary", "qty": 4.0, "total": 4000}, {"kind": "debt", "customer": "Lalao", "amount": 4000}]}
+{"id": "mg-016", "lang": "mg", "reference": "Naivo nanefa dimy arivo.", "expected": [{"kind": "payment", "customer": "Naivo", "amount": 5000}]}
+{"id": "mg-017", "lang": "mg", "reference": "Menaka roa litatra no lafo, voaloa.", "expected": [{"kind": "sale", "customer": null, "product": "menaka", "qty": 2.0, "total": 18000}]}
+{"id": "mg-018", "lang": "mg", "reference": "Bodo naka zavatra.", "expected": []}
+{"id": "mg-019", "lang": "mg", "reference": "Rabe naka vary.", "expected": []}
+{"id": "mg-020", "lang": "mg", "reference": "Nisy olona nandoa trosa.", "expected": []}
+{"id": "mg-021", "lang": "mg", "reference": "Hery nividy mofo roa amby folo, nandoa telo arivo sy eninjato.", "expected": [{"kind": "sale", "customer": "Hery", "product": "mofo", "qty": 12.0, "total": 3600}]}
+{"id": "mg-022", "lang": "mg", "reference": "Soa naka savony iray sy mofo telo.", "expected": [{"kind": "sale", "customer": "Soa", "product": "savony", "qty": 1.0, "total": 1500}, {"kind": "sale", "customer": "Soa", "product": "mofo", "qty": 3.0, "total": 900}]}
+{"id": "mg-023", "lang": "mg", "reference": "Tonga ny siramamy, telopolo kapoaka.", "expected": [{"kind": "stock", "product": "siramamy", "delta": 30}]}
+{"id": "mg-024", "lang": "mg", "reference": "Very ny menaka iray litatra.", "expected": [{"kind": "stock", "product": "menaka", "delta": -1}]}
+{"id": "mg-025", "lang": "mg", "reference": "Rabe naka siramamy efatra kapoaka, nandoa roa arivo.", "expected": [{"kind": "sale", "customer": "Rabe", "product": "siramamy", "qty": 4.0, "total": 3200}, {"kind": "debt", "customer": "Rabe", "amount": 1200}]}
+{"id": "mg-026", "lang": "mg", "reference": "Naivo naka mofo valo, nandoa arivo.", "expected": [{"kind": "sale", "customer": "Naivo", "product": "mofo", "qty": 8.0, "total": 2400}, {"kind": "debt", "customer": "Naivo", "amount": 1400}]}
+{"id": "mg-027", "lang": "mg", "reference": "Bodo nanefa ny ampahany amin'ny trosany: arivo sy dimanjato.", "expected": [{"kind": "payment", "customer": "Bodo", "amount": 1500}]}
+{"id": "mg-028", "lang": "mg", "reference": "Lalao nindrana dimy arivo Ariary.", "expected": [{"kind": "debt", "customer": "Lalao", "amount": 5000}]}
+{"id": "mg-029", "lang": "mg", "reference": "Vary roapolo kapoaka no lafo androany maraina.", "expected": [{"kind": "sale", "customer": null, "product": "vary", "qty": 20.0, "total": 20000}]}
+{"id": "mg-030", "lang": "mg", "reference": "Soa naka vary dimy kapoaka sy menaka iray litatra, nandoa folo arivo.", "expected": [{"kind": "sale", "customer": "Soa", "product": "vary", "qty": 5.0, "total": 5000}, {"kind": "sale", "customer": "Soa", "product": "menaka", "qty": 1.0, "total": 9000}, {"kind": "debt", "customer": "Soa", "amount": 4000}]}
+{"id": "mx-001", "lang": "mix", "reference": "Soa a pris roa kapoaka siramamy, nandoa 1600 Ariary.", "expected": [{"kind": "sale", "customer": "Soa", "product": "siramamy", "qty": 2.0, "total": 1600}]}
+{"id": "mx-002", "lang": "mix", "reference": "Rabe naka trois kapoaka vary, crédit daholo.", "expected": [{"kind": "sale", "customer": "Rabe", "product": "vary", "qty": 3.0, "total": 3000}, {"kind": "debt", "customer": "Rabe", "amount": 3000}]}
+{"id": "mx-003", "lang": "mix", "reference": "Naivo nividy savon roa, payé.", "expected": [{"kind": "sale", "customer": "Naivo", "product": "savony", "qty": 2.0, "total": 3000}]}
+{"id": "mx-004", "lang": "mix", "reference": "Bodo a remboursé arivo.", "expected": [{"kind": "payment", "customer": "Bodo", "amount": 1000}]}
+{"id": "mx-005", "lang": "mix", "reference": "Tonga ny huile, dix litatra.", "expected": [{"kind": "stock", "product": "menaka", "delta": 10}]}
+{"id": "mx-006", "lang": "mix", "reference": "Lalao naka pain efatra, nandoa mille deux cents.", "expected": [{"kind": "sale", "customer": "Lalao", "product": "mofo", "qty": 4.0, "total": 1200}]}
+{"id": "mx-007", "lang": "mix", "reference": "Rabe, riz deux kapoaka, mbola trosa.", "expected": [{"kind": "sale", "customer": "Rabe", "product": "vary", "qty": 2.0, "total": 2000}, {"kind": "debt", "customer": "Rabe", "amount": 2000}]}
+{"id": "mx-008", "lang": "mix", "reference": "Soa a payé sa dette, dimy arivo.", "expected": [{"kind": "payment", "customer": "Soa", "amount": 5000}]}
+{"id": "mx-009", "lang": "mix", "reference": "Vente: mofo dimy, client de passage.", "expected": [{"kind": "sale", "customer": null, "product": "mofo", "qty": 5.0, "total": 1500}]}
+{"id": "mx-010", "lang": "mix", "reference": "Hery nindrana trois mille.", "expected": [{"kind": "debt", "customer": "Hery", "amount": 3000}]}
+{"id": "mx-011", "lang": "mix", "reference": "Naivo naka sucre telo kapoaka sy riz roa kapoaka, avance arivo.", "expected": [{"kind": "sale", "customer": "Naivo", "product": "siramamy", "qty": 3.0, "total": 2400}, {"kind": "sale", "customer": "Naivo", "product": "vary", "qty": 2.0, "total": 2000}, {"kind": "debt", "customer": "Naivo", "amount": 3400}]}
+{"id": "mx-012", "lang": "mix", "reference": "Perte: savony roa simba.", "expected": [{"kind": "stock", "product": "savony", "delta": -2}]}
+{"id": "mx-013", "lang": "mix", "reference": "Bodo naka menaka un litre, payé cash.", "expected": [{"kind": "sale", "customer": "Bodo", "product": "menaka", "qty": 1.0, "total": 9000}]}
+{"id": "mx-014", "lang": "mix", "reference": "Rabe a acheté zavatra, tsy haiko intsony.", "expected": []}
+{"id": "mx-015", "lang": "mix", "reference": "Réception: vary cent kapoaka.", "expected": [{"kind": "stock", "product": "vary", "delta": 100}]}
+{"id": "mx-016", "lang": "mix", "reference": "Lalao nanefa deux mille cinq cents.", "expected": [{"kind": "payment", "customer": "Lalao", "amount": 2500}]}
+{"id": "mx-017", "lang": "mix", "reference": "Soa naka mofo vingt, nandoa dimy arivo.", "expected": [{"kind": "sale", "customer": "Soa", "product": "mofo", "qty": 20.0, "total": 6000}, {"kind": "debt", "customer": "Soa", "amount": 1000}]}
+{"id": "mx-018", "lang": "mix", "reference": "Client tsy fantatra naka savon telo.", "expected": [{"kind": "sale", "customer": null, "product": "savony", "qty": 3.0, "total": 4500}]}
+{"id": "mx-019", "lang": "mix", "reference": "Naivo, crédit arivo dimanjato.", "expected": [{"kind": "debt", "customer": "Naivo", "amount": 1500}]}
+{"id": "mx-020", "lang": "mix", "reference": "Hery naka riz, combien déjà?", "expected": []}
+{"id": "fr-001", "lang": "fr", "reference": "Naivo a acheté quatre savons.", "expected": [{"kind": "sale", "customer": "Naivo", "product": "savony", "qty": 4.0, "total": 6000}]}
+{"id": "fr-002", "lang": "fr", "reference": "Rabe a pris trois kapoaka de riz et a payé deux mille ariary.", "expected": [{"kind": "sale", "customer": "Rabe", "product": "vary", "qty": 3.0, "total": 3000}, {"kind": "debt", "customer": "Rabe", "amount": 1000}]}
+{"id": "fr-003", "lang": "fr", "reference": "Soa a remboursé mille cinq cents ariary.", "expected": [{"kind": "payment", "customer": "Soa", "amount": 1500}]}
+{"id": "fr-004", "lang": "fr", "reference": "Livraison de sucre : quarante kapoaka.", "expected": [{"kind": "stock", "product": "siramamy", "delta": 40}]}
+{"id": "fr-005", "lang": "fr", "reference": "Bodo emprunte deux mille ariary.", "expected": [{"kind": "debt", "customer": "Bodo", "amount": 2000}]}
+{"id": "fr-006", "lang": "fr", "reference": "Vente au comptant : six pains.", "expected": [{"kind": "sale", "customer": null, "product": "mofo", "qty": 6.0, "total": 1800}]}
+{"id": "fr-007", "lang": "fr", "reference": "Lalao a pris un litre d'huile, à crédit.", "expected": [{"kind": "sale", "customer": "Lalao", "product": "menaka", "qty": 1.0, "total": 9000}, {"kind": "debt", "customer": "Lalao", "amount": 9000}]}
+{"id": "fr-008", "lang": "fr", "reference": "Trois pains abîmés, à retirer du stock.", "expected": [{"kind": "stock", "product": "mofo", "delta": -3}]}
+{"id": "fr-009", "lang": "fr", "reference": "Hery a pris deux savons et cinq pains, il a donné trois mille.", "expected": [{"kind": "sale", "customer": "Hery", "product": "savony", "qty": 2.0, "total": 3000}, {"kind": "sale", "customer": "Hery", "product": "mofo", "qty": 5.0, "total": 1500}, {"kind": "debt", "customer": "Hery", "amount": 1500}]}
+{"id": "fr-010", "lang": "fr", "reference": "Quelqu'un a pris quelque chose à crédit.", "expected": []}
