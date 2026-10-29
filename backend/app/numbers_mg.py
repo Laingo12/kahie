@@ -128,3 +128,52 @@ def numbers_in(text: str) -> set[int]:
     """All numbers in an already-normalised text. '2 000' is one number; '3 2000' is two."""
     return {_num_value(m.group()) for m in TOKEN.finditer(text or "")
             if m.group()[0].isdigit() and _num_value(m.group()) is not None}
+
+
+# ---------------------------------------------------------------- digits → Malagasy words (for speech)
+_U = ["", "iray", "roa", "telo", "efatra", "dimy", "enina", "fito", "valo", "sivy"]
+_U_COMPOUND = ["", "iraika", "roa", "telo", "efatra", "dimy", "enina", "fito", "valo", "sivy"]  # before amby
+_T = ["", "folo", "roapolo", "telopolo", "efapolo", "dimampolo", "enimpolo", "fitopolo", "valopolo", "sivifolo"]
+_H = ["", "zato", "roanjato", "telonjato", "efajato", "dimanjato", "eninjato", "fitonjato", "valonjato", "sivinjato"]
+
+
+def _below_1000(n: int) -> str:
+    """1–999. Units first with amby / ambin'ny folo, hundreds before them: 125 → "zato dimy amby roapolo"."""
+    h, rest = divmod(n, 100)
+    t, u = divmod(rest, 10)
+    if t == 0:
+        small = _U[u]
+    elif u == 0:
+        small = _T[t]
+    elif t == 1:
+        small = f"{_U_COMPOUND[u]} ambin'ny folo"
+    else:
+        small = f"{_U_COMPOUND[u]} amby {_T[t]}"
+    return " ".join(x for x in (_H[h], small) if x)
+
+
+def to_words(n: int) -> str:
+    """Integer → spoken Malagasy, big parts first: 2500 → "roa arivo sy dimanjato",
+    32000 → "roa amby telopolo arivo". Written so that to_digits(to_words(n)) == n."""
+    n = int(n)
+    if n == 0:
+        return "aotra"
+    if n < 0:
+        return "latsaka " + to_words(-n)
+    millions, rest = divmod(n, 1_000_000)
+    thousands, units = divmod(rest, 1000)
+    parts = []
+    if millions:
+        parts.append(f"{_below_1000(millions)} tapitrisa")
+    if thousands:
+        parts.append("arivo" if thousands == 1 else f"{_below_1000(thousands)} arivo")
+    if units:
+        parts.append(_below_1000(units))
+    return " sy ".join(parts)
+
+
+def speakify(text: str) -> str:
+    """Text for the speech synthesiser: every number in words, "Ar" → "Ariary"."""
+    text = re.sub(r"\d{1,3}(?:[   ]\d{3})+|\d+", lambda m: to_words(int(re.sub(r"\D", "", m.group()))), text or "")
+    text = re.sub(r"(?<!\w)Ar(?!\w)", "Ariary", text)
+    return text.replace("\u00a0", " ").replace("\u202f", " ")

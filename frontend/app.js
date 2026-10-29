@@ -21,6 +21,35 @@ function toast(msg, action) {
   toast.timer = setTimeout(() => (t.hidden = true), 6000);
 }
 
+// ---------------------------------------------------------------- voice (speech synthesis)
+// Kahie reads its answers and the confirmation card aloud. Numbers come from the server already
+// in Malagasy words ("roa arivo sy valonjato"). No Malagasy voice ships with browsers: we prefer one
+// if the phone has it, else a French voice (closest spelling-to-sound), else the default voice.
+let voiceOn = true;
+try { voiceOn = localStorage.getItem("kahie-voice") !== "off"; } catch {}
+function renderVoice() { $("#voice").textContent = voiceOn ? "🔊" : "🔇"; $("#voice").classList.toggle("off", !voiceOn); }
+$("#voice").onclick = () => {
+  voiceOn = !voiceOn;
+  try { localStorage.setItem("kahie-voice", voiceOn ? "on" : "off"); } catch {}
+  if (!voiceOn && "speechSynthesis" in window) speechSynthesis.cancel();
+  renderVoice();
+};
+function pickVoice() {
+  const vs = ("speechSynthesis" in window) ? speechSynthesis.getVoices() : [];
+  return vs.find((v) => /^mg/i.test(v.lang)) || vs.find((v) => /^fr/i.test(v.lang)) || null;
+}
+function speak(text) {
+  if (!voiceOn || !text || !("speechSynthesis" in window)) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  const v = pickVoice();
+  if (v) { u.voice = v; u.lang = v.lang; } else { u.lang = "fr-FR"; }
+  u.rate = 0.95;
+  speechSynthesis.speak(u);
+}
+if ("speechSynthesis" in window) speechSynthesis.onvoiceschanged = () => {};
+renderVoice();
+
 // ---------------------------------------------------------------- offline queue (IndexedDB)
 const idb = new Promise((res, rej) => {
   const r = indexedDB.open("kahie", 1);
@@ -98,9 +127,26 @@ async function sendVoice(blob, text) {
   if (text) fd.append("text", text);
   const r = await fetch("api/voice", { method: "POST", body: fd });
   if (!r.ok) { $("#rec-state").textContent = "Nisy olana, andramo indray"; throw new Error(await r.text()); }
-  renderCard(await r.json());
+  const res = await r.json();
+  if (res.kind === "answer") showAnswer(res); else renderCard(res);
   $("#rec-state").textContent = "Vonona";
 }
+
+// ---------------------------------------------------------------- answers to questions
+let lastAnswer = "";
+function showAnswer(res) {
+  const a = res.answer;
+  $("#answer-q").textContent = res.transcript ? "« " + res.transcript + " »" : "";
+  $("#answer-text").textContent = a.text;
+  $("#answer-rows").innerHTML = (a.rows || []).map((r) =>
+    `<li><span>${esc(r.label)}</span><b>${esc(r.value)}</b></li>`).join("");
+  $("#answer-box").hidden = false;
+  lastAnswer = a.speak;
+  show("record");
+  speak(a.speak);
+}
+$("#answer-replay").onclick = () => speak(lastAnswer);
+document.querySelectorAll(".chips button").forEach((b) => (b.onclick = () => sendVoice(null, b.dataset.q)));
 
 $("#typed-form").onsubmit = (e) => { e.preventDefault(); const v = $("#typed").value.trim(); if (v) sendVoice(null, v); };
 
@@ -110,7 +156,8 @@ $("#photo").onchange = async (e) => {
   const fd = new FormData();
   fd.append("photo", f);
   const r = await fetch("api/image", { method: "POST", body: fd });
-  renderCard(await r.json());
+  const res = await r.json();
+  if (res.kind === "answer") showAnswer(res); else renderCard(res);
 };
 
 // ---------------------------------------------------------------- confirmation card
@@ -123,8 +170,42 @@ function renderCard(p) {
   $("#ear2").textContent = p.ears.ear2 ?? "—";
   const v = p.verdict;
   let html = "";
+
+  // --- agent trace: which model, how long, why it asked (Meta-specific, verifiable) ---
+  if (p.trace && p.trace.length) {
+    const models = [...new Set(p.trace.map(t => t.model).filter(Boolean))];
+    html += `<details class="trace"><summary>🔍 Trace · ${p.trace.length} étapes` +
+      (models.length ? ` · <span class="models">${models.map(esc).join(" + ")}</span>` : "") +
+      ` · ${p.latency_ms}ms</summary>`;
+    for (const t of p.trace) {
+      html += `<div class="trace-row"><b>${esc(t.step)}</b>`;
+      if (t.model) html += ` · <span class="model">${esc(t.model)}</span>`;
+      if (t.source) html += ` · <span class="src">${esc(t.source)}</span>`;
+      if (t.ms != null) html += ` · ${t.ms}ms`;
+      if (t.text) html += `<div class="trace-text">${esc(t.text)}</div>`;
+      if (t.changed) html += `<div class="trace-c">↻ lexicon applied</div>`;
+      if (t.agree === false) html += `<div class="trace-c bad">⚠ désaccord</div>`;
+      if (t.agree === true) html += `<div class="trace-c">✓ accord</div>`;
+      if (t.question) html += `<div class="trace-q">→ ${esc(t.question)}</div>`;
+      if (t.dropped) html += `<div class="trace-i">⚠ audio droppé (prompt_tokens bas)</div>`;
+      if (t.error) html += `<div class="trace-i">⚠ ${esc(t.error)}</div>`;
+      if (t.level) html += `<div class="trace-c">level=${esc(t.level)}</div>`;
+      if (t.issues && t.issues.length) {
+        for (const i of t.issues) html += `<div class="trace-i">⚠ ${esc(i.msg)}</div>`;
+      }
+      if (t.calls) {
+        for (const c of t.calls) {
+          const args = JSON.stringify(c.args || {});
+          html += `<div class="trace-text">→ <code>${esc(c.tool)}</code>(${esc(args.slice(0, 120))})</div>`;
+        }
+      }
+      html += `</div>`;
+    }
+    html += `</details>`;
+  }
+
   if (v.level === "clarify") {
-    html = `<div class="question">${esc(v.question)}</div>`;
+    html += `<div class="question">${esc(v.question)}</div>`;
     // Ears disagreed: one tap picks the right reading.
     for (const o of v.options || []) {
       html += `<button class="option" data-choice="${esc(o.id)}">${esc(o.text)}</button>`;
@@ -142,6 +223,8 @@ function renderCard(p) {
     }
     if (v.total) html += `<div class="row total"><span>Totaly</span><span>${fmt(v.total)}</span></div>`;
     for (const i of v.issues || []) html += `<div class="issue">⚠ ${esc(i.msg)}</div>`;
+    html += previewHtml(v.preview);
+    if (v.answer) html += `<div class="card-answer">💬 ${esc(v.answer.text)}</div>`;
   }
   $("#card").innerHTML = html;
   $("#card").querySelectorAll(".option").forEach((b) => (b.onclick = () => answer({ choice: b.dataset.choice })));
@@ -150,6 +233,28 @@ function renderCard(p) {
   $("#btn-ok").disabled = v.level === "clarify";
   $("#btn-ok").textContent = v.level === "warn" ? "✓ Marina ihany" : "✓ Marina";
   show("confirm");
+  speak(v.speak);
+}
+
+// Automatic calculation: what the ledger will look like after ✓ (computed by the server, nothing written yet).
+function previewHtml(pv) {
+  if (!pv) return "";
+  const qty = (x) => Number(x).toLocaleString("fr-FR");
+  let h = "";
+  for (const c of pv.customers || []) {
+    const up = c.after > c.before;
+    h += `<div class="pv-row"><span>Trosan'i ${esc(c.name)}</span>` +
+      `<span>${fmt(c.before)} → <b class="${up ? "up" : "down"}">${fmt(Math.max(c.after, 0))}</b></span></div>`;
+  }
+  for (const p of pv.products || []) {
+    h += `<div class="pv-row"><span>Tahiry ${esc(p.name)}</span>` +
+      `<span>${qty(p.before)} → <b class="${p.after < 10 ? "low" : ""}">${qty(p.after)}</b> ${esc(p.unit)}</span></div>`;
+  }
+  if (pv.sales_today) {
+    h += `<div class="pv-row"><span>Varotra androany</span>` +
+      `<span>${fmt(pv.sales_today.before)} → <b>${fmt(pv.sales_today.after)}</b></span></div>`;
+  }
+  return h ? `<div class="preview"><div class="pv-title">🧮 Kajy ho azy — aorian'ny ✓</div>${h}</div>` : "";
 }
 
 // Answer the agent's question → a new plan, which still needs the ✓ tap.
@@ -167,8 +272,11 @@ $("#btn-ok").onclick = async () => {
     body: JSON.stringify({ pending_id: current.pending_id }) });
   const res = await r.json();
   current = null;
-  show("dash");
+  $("#answer-box").hidden = true;
+  show("record");            // stay ready for the next note
+  loadMini();
   toast("Voasoratra ✓", { label: "Foanana", run: () => undo(res.audit_id) });
+  speak("Voasoratra.");
   flushQueue();
 };
 
@@ -193,7 +301,23 @@ $("#btn-fix").onclick = async () => {
 async function undo(id) {
   await fetch(`api/undo/${id}`, { method: "POST" });
   toast("Nofoanana");
-  loadDash();
+  loadMini();
+  if ($("#screen-dash").classList.contains("active")) loadDash();
+}
+
+// ---------------------------------------------------------------- live report on the record screen
+async function loadMini() {
+  try {
+    const d = await (await fetch("api/report")).json();
+    $("#m-sales").textContent = fmt(d.sales_total);
+    $("#m-debt").textContent = fmt(d.debts.reduce((s, x) => s + x.owed, 0));
+    $("#m-debtors").innerHTML = d.debts.slice(0, 3).map((x) =>
+      `<li><span>${esc(x.name)}</span><b>${fmt(x.owed)}</b></li>`).join("") ||
+      `<li class="none"><span>Tsy misy trosa</span></li>`;
+    const low = d.low_stock || [];
+    $("#m-low").hidden = !low.length;
+    $("#m-low").textContent = low.length ? "⚠ Efa ho lany: " + low.map((x) => `${x.name} ${x.stock} ${x.unit}`).join(", ") : "";
+  } catch { /* offline: keep the last numbers */ }
 }
 
 // ---------------------------------------------------------------- dashboard + statement
@@ -201,11 +325,46 @@ async function loadDash() {
   const d = await (await fetch("api/report")).json();
   $("#k-sales").textContent = fmt(d.sales_total);
   $("#k-debt").textContent = fmt(d.debts.reduce((s, x) => s + x.owed, 0));
-  $("#debts").innerHTML = d.debts.map((x) => `<li><span>${esc(x.name)}</span><b>${fmt(x.owed)}</b></li>`).join("") || "<li>Tsy misy</li>";
-  $("#low").innerHTML = d.low_stock.map((x) => `<li><span>${esc(x.name)}</span><span>${esc(x.stock)} ${esc(x.unit)}</span></li>`).join("") || "<li>Tsara daholo</li>";
+  $("#debts").innerHTML = d.debts.map((x) =>
+    `<li data-customer="${esc(x.name)}"><span>${esc(x.name)}</span><b>${fmt(x.owed)}</b></li>`
+  ).join("") || "<li>Tsy misy</li>";
+  $("#low").innerHTML = d.low_stock.map((x) =>
+    `<li><span>${esc(x.name)}</span><span>${esc(x.stock)} ${esc(x.unit)}</span></li>`
+  ).join("") || "<li>Tsara daholo</li>";
   $("#journal").innerHTML = d.journal.map((j) =>
     `<li><span>#${j.id} ${j.kind === "undo" ? "↩ " : ""}${esc(j.transcript)}</span>` +
     (j.kind === "execute" ? `<button onclick="undo(${j.id})">Foanana</button>` : "") + "</li>").join("");
+
+  // Tap a customer → expand the per-customer debt report
+  document.querySelectorAll("#debts li[data-customer]").forEach((li) => {
+    li.onclick = async () => {
+      const name = li.dataset.customer;
+      const r = await (await fetch(`api/debt/${encodeURIComponent(name)}`)).json();
+      if (!r.lines.length) return;
+      const detail = r.lines.map((l) => {
+        const isPay = l.amount < 0;
+        const cls = isPay ? "pay" : (l.age_days >= 7 ? "old" : "");
+        return `<div class="row"><span>${esc(l.created_at.slice(0, 10))} · ${esc(l.reason || (isPay ? "naloa" : "trosa"))}</span>` +
+          `<b>${isPay ? "−" : ""}${fmt(Math.abs(l.amount))}</b>` +
+          `<span class="age ${cls}">${isPay ? "" : l.age_days + "j"}</span></div>`;
+      }).join("");
+      li.insertAdjacentHTML("afterend",
+        `<li class="detail"><div class="detail-head">Fitambarany : <b>${fmt(r.total)}</b>` +
+        (r.oldest_days > 0 ? ` · tranainy ${r.oldest_days}j` : "") + `</div>${detail}</li>`);
+      li.onclick = null;  // don't stack expansions
+    };
+  });
+
+  // Aged-debt alerts (>= 7 days)
+  const a = await (await fetch("api/alerts?days=7")).json();
+  if (a.urgent.length) {
+    $("#alerts").hidden = false;
+    $("#alerts").innerHTML = "<h3>⚠ Trosa efa ela</h3>" + a.urgent.map((x) =>
+      `<div class="alert-line">${esc(x.name)} — ${fmt(x.owed)} · ${x.oldest_days} andro</div>`
+    ).join("");
+  } else {
+    $("#alerts").hidden = true;
+  }
 }
 
 async function loadStatement() {
@@ -223,3 +382,20 @@ async function loadStatement() {
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
 netState();
 renderQueue();
+loadMini();
+
+// ---------------------------------------------------------------- PWA install
+let installEvent = null;
+addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  installEvent = e;
+  $("#install").hidden = false;
+});
+$("#install").onclick = async () => {
+  if (!installEvent) return;
+  installEvent.prompt();
+  const { outcome } = await installEvent.userChoice;
+  if (outcome === "accepted") $("#install").hidden = true;
+  installEvent = null;
+};
+addEventListener("appinstalled", () => { $("#install").hidden = true; });

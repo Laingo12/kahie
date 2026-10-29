@@ -61,3 +61,16 @@ def test_answering_the_question_on_the_card():
     assert r2["verdict"]["level"] in ("ok", "warn") and r2["verdict"]["lines"][0]["qty"] == 2
     assert client.post("/api/confirm", json={"pending_id": r2["pending_id"]}).status_code == 200
     assert client.post("/api/clarify", json={"pending_id": "nope", "text": "x"}).status_code == 404
+
+
+def test_question_is_answered_and_writes_nothing():
+    before = conn.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0]
+    r = client.post("/api/voice", data={"text": "Iza avy no mbola tsy nandoa trosa?"}).json()
+    assert r["kind"] == "answer" and r["answer"]["text"] and r["answer"]["speak"]
+    assert conn.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0] == before
+
+
+def test_card_carries_the_automatic_calculation():
+    r = client.post("/api/voice", data={"text": "Bodo naka roa kapoaka vary"}).json()
+    pv = r["verdict"]["preview"]
+    assert pv["products"][0]["after"] == pv["products"][0]["before"] - 2 and r["verdict"]["summary"]

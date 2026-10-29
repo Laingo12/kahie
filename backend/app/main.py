@@ -113,6 +113,76 @@ def report():
             "low_stock": low, "journal": journal, "stock": [dict(r) for r in conn.execute("SELECT * FROM products")]}
 
 
+# ---------------------------------------------------------------- aged debts
+def _oldest_unpaid_since(conn, customer_id: int):
+    """Walk the debt rows in order and return the created_at of the earliest row
+    after which the running balance stayed > 0 until now. None if the balance <= 0.
+
+    This is what a shopkeeper means by "since when does this person owe me?":
+    a repayment that clears the balance resets the clock.
+    """
+    rows = conn.execute(
+        "SELECT amount, created_at FROM debts WHERE customer_id=? AND voided=0 ORDER BY created_at, id",
+        (customer_id,),
+    ).fetchall()
+    balance, since = 0, None
+    for r in rows:
+        prev = balance
+        balance += r["amount"]
+        if prev <= 0 and balance > 0:
+            since = r["created_at"]
+        elif prev > 0 and balance <= 0:
+            since = None
+    return since if balance > 0 else None
+
+
+@app.get("/api/alerts")
+def alerts(days: int = 7):
+    """Aged debts: every customer who still owes, with the age of their oldest unpaid debt.
+
+    `urgent` = customers whose unpaid balance has been > 0 for at least `days` days.
+    """
+    customers = conn.execute("""
+        SELECT c.id, c.name, SUM(d.amount) AS owed
+        FROM debts d JOIN customers c ON c.id = d.customer_id
+        WHERE d.voided = 0
+        GROUP BY c.id
+        HAVING owed > 0
+    """).fetchall()
+    out = []
+    today = date.today()
+    for c in customers:
+        since = _oldest_unpaid_since(conn, c["id"])
+        if not since:
+            continue
+        age = (today - date.fromisoformat(since[:10])).days
+        out.append({"name": c["name"], "owed": c["owed"], "oldest_since": since, "oldest_days": age})
+    out.sort(key=lambda x: (-x["oldest_days"], -x["owed"]))
+    return {"threshold_days": days, "alerts": out, "urgent": [a for a in out if a["oldest_days"] >= days]}
+
+
+@app.get("/api/debt/{customer}")
+def debt_report(customer: str):
+    """Per-customer debt report: every line, its age in days, the net balance."""
+    rows = conn.execute("""
+        SELECT d.id, d.amount, d.reason, d.created_at,
+               CAST(julianday('now') - julianday(d.created_at) AS INTEGER) AS age_days
+        FROM debts d JOIN customers c ON c.id = d.customer_id
+        WHERE d.voided = 0 AND lower(c.name) = lower(?)
+        ORDER BY d.created_at, d.id
+    """, (customer,)).fetchall()
+    lines = [dict(r) for r in rows]
+    total = sum(r["amount"] for r in lines)
+    first_debt = next((r for r in lines if r["amount"] > 0), None)
+    return {
+        "customer": customer,
+        "total": total,
+        "oldest": first_debt["created_at"] if first_debt else None,
+        "oldest_days": first_debt["age_days"] if first_debt else 0,
+        "lines": lines,
+    }
+
+
 @app.get("/api/statement")
 def statement(days: int = 7):
     """Weekly statement sealed by the head of the audit hash chain."""

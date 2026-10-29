@@ -23,8 +23,10 @@ OPEN_WEIGHTS_BASE = os.getenv("OPEN_WEIGHTS_BASE", "")
 OPEN_WEIGHTS_KEY = os.getenv("OPEN_WEIGHTS_KEY", "")
 OPEN_WEIGHTS_MODEL = os.getenv("OPEN_WEIGHTS_MODEL", "meta-models/muse-spark-open-1026")
 
+
 # "api" = Meta Model API, "open" = open weights, "mock" = offline rules (tests and demo without key)
-BACKEND = os.getenv("KAHIE_BACKEND", "api" if MODEL_API_KEY else "mock")
+# Empty KAHIE_BACKEND (as shipped in .env.example) → auto-detect from MODEL_API_KEY.
+BACKEND = os.getenv("KAHIE_BACKEND") or ("api" if MODEL_API_KEY else "mock")
 
 # Evaluation switches (configs A–D): turn ear 2 or the lexicon off to measure what each one adds.
 EAR2_ON = os.getenv("KAHIE_EAR2", "on") == "on"
@@ -35,8 +37,12 @@ DB_PATH =Path(os.getenv("KAHIE_DB", ROOT / "data" / "kahie.db"))
 # Verifier thresholds
 PRICE_DEVIATION = float(os.getenv("PRICE_DEVIATION", "0.5"))   # ±50 % from usual price → reinforced confirmation
 
-# Ear 1 mode: "spark_literal" | "whisper" | "voice_transcribe" | "off"
-EAR1_MODE = os.getenv("EAR1_MODE", "spark_literal")
+# Ear 1 mode: "voice_transcribe" (default) | "spark_literal" | "whisper" | "off"
+EAR1_MODE = os.getenv("EAR1_MODE", "voice_transcribe")
+
+# Voice Transcribe language bias: empty = auto-detect (Malagasy is not a bias language);
+# "French" biases toward French. Comma-separated language names, e.g. "French,English".
+VT_LANGUAGE_BIAS = [x.strip() for x in os.getenv("VT_LANGUAGE_BIAS", "").split(",") if x.strip()]
 
 # Optional: separate model for ear 1 (defaults to ear 2's model)
 MODEL_EAR1 = os.getenv("MODEL_EAR1", os.getenv("MODEL_EAR2", "muse-spark-1.2"))

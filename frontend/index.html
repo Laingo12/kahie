@@ -3,16 +3,25 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#1f2a44">
-  <title>Kahie</title>
+  <meta name="theme-color" content="#fbf3e6">
+  <meta name="description" content="Kahie — cahier vocal malagasy. Transforme les notes vocales des commerçants en cahier de comptes vérifié.">
+  <title>Kahie — cahier vocal</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon.svg">
   <link rel="stylesheet" href="styles.css">
+  <meta property="og:title" content="Kahie — the voice ledger that speaks Malagasy">
+  <meta property="og:description" content="A shopkeeper speaks Malagasy; Kahie writes a verified ledger. Meta Global AI Developer Hackathon 2026.">
+  <meta property="og:image" content="https://kahie.votra-google.it/img/poster.jpg">
+  <meta name="twitter:card" content="summary_large_image">
 </head>
 <body>
   <header class="top">
-    <div class="brand">Kahie <span class="tag">cahier vocal</span></div>
-    <div id="net" class="net" title="Réseau">●</div>
+    <div class="brand"><img class="logo" src="img/logo-k.png" alt="">Kahie <span class="tag">cahier vocal</span></div>
+    <div class="top-right">
+      <button id="voice" class="voice" title="Feo: miteny / mangina" aria-label="Feo">🔊</button>
+      <div id="net" class="net" title="Réseau">●</div>
+    </div>
   </header>
 
   <main>
@@ -23,17 +32,46 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V22h2v-3.08A7 7 0 0 0 19 12h-2Z"/></svg>
       </button>
       <div id="rec-state" class="rec-state">Vonona</div>
+
+      <!-- Kahie answers questions about the ledger (read-only, computed from the database) -->
+      <div id="answer-box" class="answer-box" hidden aria-live="polite">
+        <div class="answer-head"><img src="img/logo-k.png" alt=""><b>Kahie</b>
+          <button id="answer-replay" class="replay" title="Henoy indray" aria-label="Henoy indray">🔊</button></div>
+        <p id="answer-q" class="answer-q"></p>
+        <p id="answer-text" class="answer-text"></p>
+        <ul id="answer-rows" class="answer-rows"></ul>
+      </div>
+
+      <div class="chips" aria-label="Fanontaniana haingana">
+        <button data-q="Iza avy no mbola tsy nandoa trosa?">Iza no manana trosa?</button>
+        <button data-q="Ohatrinona ny varotra androany?">Varotra androany</button>
+        <button data-q="Inona no efa ho lany?">Inona no ho lany?</button>
+        <button data-q="Iza no manana trosa efa ela?">Trosa efa ela</button>
+      </div>
+
+      <!-- Live report: refreshed after every ✓ and every undo -->
+      <section id="mini" class="mini" aria-label="Tatitra androany">
+        <div class="mini-kpis">
+          <div><span>Varotra androany</span><b id="m-sales">–</b></div>
+          <div><span>Trosa rehetra</span><b id="m-debt">–</b></div>
+        </div>
+        <ul id="m-debtors" class="mini-list"></ul>
+        <div id="m-low" class="mini-low" hidden></div>
+      </section>
+
       <details class="typed">
         <summary>Soraty (test)</summary>
         <form id="typed-form">
-          <input id="typed" placeholder="Rabe naka 3 kapoaka vary, nandoa 2000 Ar">
-          <button>Alefa</button>
+          <input id="typed" placeholder="Rabe naka 3 kapoaka vary, nandoa 2000 Ar" autocomplete="off">
+          <button type="submit">Alefa</button>
         </form>
       </details>
+
       <label class="photo-btn">
         <input id="photo" type="file" accept="image/*" capture="environment" hidden>
         📷 Sary ny kahie (import des dettes)
       </label>
+
       <div id="queue" class="queue" hidden></div>
     </section>
 
@@ -52,6 +90,7 @@
 
     <!-- 3. Dashboard -->
     <section id="screen-dash" class="screen" aria-label="Tabilao">
+      <div id="alerts" class="alerts" hidden></div>
       <div class="kpis">
         <div class="kpi"><span>Varotra androany</span><b id="k-sales">–</b></div>
         <div class="kpi"><span>Trosa rehetra</span><b id="k-debt">–</b></div>
@@ -68,12 +107,15 @@
   </main>
 
   <nav class="tabs">
-    <button data-screen="record" class="on">🎙️<span>Raketo</span></button>
-    <button data-screen="dash">📒<span>Tabilao</span></button>
-    <button data-screen="statement">🧾<span>Tatitra</span></button>
+    <button data-screen="record" class="on"><span class="ico">🎙️</span><span>Raketo</span></button>
+    <button data-screen="dash"><span class="ico">📒</span><span>Tabilao</span></button>
+    <button data-screen="statement"><span class="ico">🧾</span><span>Tatitra</span></button>
   </nav>
 
+  <button id="install" class="install" hidden>📲 Installa an'i Kahie</button>
+
   <div id="toast" class="toast" hidden></div>
+
   <script src="app.js"></script>
 </body>
 </html>

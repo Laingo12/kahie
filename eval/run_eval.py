@@ -78,7 +78,10 @@ def main():
         res = pipeline.handle_voice(conn, audio, "audio/webm", hint_text=None if audio else case["reference"])
         ms = (time.perf_counter() - t0) * 1000
         v = res["verdict"]
-        exact, critical = score(case["expected"], v.get("lines", []))
+        # When the agent asked a question, the honest "plan" is [] — same rule as make_cases.py,
+        # where a case whose right answer is "ask" is stored with expected = [].
+        got = v.get("lines", []) if v["level"] != "clarify" else []
+        exact, critical = score(case["expected"], got)
         rows.append({"id": case["id"], "lang": case.get("lang"), "audio": bool(audio), "level": v["level"], "exact": exact,
                      "critical": critical, "clarified": v["level"] == "clarify", "ms": round(ms)})
         conn.execute("DELETE FROM pending_plans")

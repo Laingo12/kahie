@@ -1,0 +1,26 @@
+[Unit]
+Description=Kahie API
+Documentation=https://github.com/<you>/kahie
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/kahie
+Environment="KAHIE_DB=/opt/kahie/data/kahie.db"
+Environment="PATH=/opt/kahie/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/opt/kahie/.venv/bin/uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --workers 1
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/kahie/data
+
+[Install]
+WantedBy=multi-user.target

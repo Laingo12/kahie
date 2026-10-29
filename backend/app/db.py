@@ -35,7 +35,12 @@ def transaction(conn: sqlite3.Connection):
 
 
 def seed_demo(conn: sqlite3.Connection) -> None:
-    """Small fictional shop used for the demo and tests. No real customer data."""
+    """Small fictional shop used for the demo and tests. No real customer data.
+
+    Hery and Lalao are included so the eval cases that mention them
+    (mg-015, mg-021, mg-028, mx-006, mx-010, mx-016, fr-007, fr-009)
+    resolve to a known customer instead of a spurious clarification.
+    """
     if conn.execute("SELECT COUNT(*) FROM products").fetchone()[0]:
         return
     conn.executemany(
@@ -50,12 +55,19 @@ def seed_demo(conn: sqlite3.Connection) -> None:
     )
     conn.executemany(
         "INSERT INTO customers(name) VALUES (?)",
-        [("Rabe",), ("Soa",), ("Naivo",), ("Bodo",)],
+        [("Rabe",), ("Soa",), ("Naivo",), ("Bodo",), ("Hery",), ("Lalao",)],
     )
+    # lexicon.normalize() matches whole words only, so French plurals need their own entries.
+    # Keep singulier + pluriel + French units — the eval (cases.jsonl) uses all three forms.
     conn.executemany(
         "INSERT INTO lexicon(heard, canonical, kind) VALUES (?,?,?)",
-        [("riz", "vary", "product"), ("sucre", "siramamy", "product"),
-         ("huile", "menaka", "product"), ("savon", "savony", "product"),
-         ("pain", "mofo", "product")],
+        [
+            ("riz", "vary", "product"),
+            ("sucre", "siramamy", "product"), ("sucres", "siramamy", "product"),
+            ("huile", "menaka", "product"), ("huiles", "menaka", "product"),
+            ("savon", "savony", "product"), ("savons", "savony", "product"),
+            ("pain", "mofo", "product"), ("pains", "mofo", "product"),
+            ("litre", "litatra", "unit"), ("litres", "litatra", "unit"),
+        ],
     )
     conn.commit()

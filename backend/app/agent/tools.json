@@ -7,22 +7,49 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "customer": {"type": ["string", "null"], "description": "Nom du client, null si client de passage"},
+          "customer": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nom du client, null si client de passage"
+          },
           "items": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
-                "product": {"type": "string"},
-                "qty": {"type": "number"},
-                "unit_price": {"type": ["integer", "null"], "description": "Prix unitaire en Ar si dit, sinon null"}
+                "product": {
+                  "type": "string"
+                },
+                "qty": {
+                  "type": "number"
+                },
+                "unit_price": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Prix unitaire en Ar si dit, sinon null"
+                }
               },
-              "required": ["product", "qty"]
+              "required": [
+                "product",
+                "qty"
+              ]
             }
           },
-          "paid": {"type": ["integer", "null"], "description": "Montant payé en Ar, null si non dit (= tout payé)"}
+          "paid": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Montant payé en Ar, null si non dit (= tout payé)"
+          }
         },
-        "required": ["items"]
+        "required": [
+          "items"
+        ]
       }
     }
   },
@@ -34,11 +61,26 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "product": {"type": "string"},
-          "delta": {"type": "number", "description": "Positif = entrée (réapprovisionnement), négatif = perte"},
-          "reason": {"type": "string", "enum": ["restock", "loss"]}
+          "product": {
+            "type": "string"
+          },
+          "delta": {
+            "type": "number",
+            "description": "Positif = entrée (réapprovisionnement), négatif = perte"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "restock",
+              "loss"
+            ]
+          }
         },
-        "required": ["product", "delta", "reason"]
+        "required": [
+          "product",
+          "delta",
+          "reason"
+        ]
       }
     }
   },
@@ -49,8 +91,21 @@
       "description": "Ajoute une dette sans vente (ex. import du cahier papier).",
       "parameters": {
         "type": "object",
-        "properties": {"customer": {"type": "string"}, "amount": {"type": "integer"}, "reason": {"type": "string"}},
-        "required": ["customer", "amount"]
+        "properties": {
+          "customer": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "integer"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "customer",
+          "amount"
+        ]
       }
     }
   },
@@ -61,8 +116,18 @@
       "description": "Le client rembourse tout ou partie de sa dette.",
       "parameters": {
         "type": "object",
-        "properties": {"customer": {"type": "string"}, "amount": {"type": "integer"}},
-        "required": ["customer", "amount"]
+        "properties": {
+          "customer": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "customer",
+          "amount"
+        ]
       }
     }
   },
@@ -73,8 +138,65 @@
       "description": "À utiliser quand produit, client, quantité ou montant est incertain. Question courte en malgache.",
       "parameters": {
         "type": "object",
-        "properties": {"question": {"type": "string"}},
-        "required": ["question"]
+        "properties": {
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "question"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "ask_ledger",
+      "description": "Le commerçant POSE UNE QUESTION sur ses données (qui doit de l'argent, dette d'un client, ventes, stock). N'écrit rien. Choisis le sujet ; la réponse est calculée depuis la base, n'invente aucun chiffre.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "topic": {
+            "type": "string",
+            "enum": [
+              "debts",
+              "customer_balance",
+              "aged_debts",
+              "sales",
+              "stock",
+              "low_stock"
+            ],
+            "description": "debts = qui doit ; customer_balance = dette d'un client ; aged_debts = dettes de plus de 7 jours ; sales = ventes ; stock = reste d'un produit ; low_stock = produits presque épuisés"
+          },
+          "customer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "product": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "period": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "today",
+              "week",
+              "month",
+              null
+            ]
+          }
+        },
+        "required": [
+          "topic"
+        ]
       }
     }
   }

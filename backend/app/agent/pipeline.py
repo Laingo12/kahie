@@ -3,6 +3,10 @@
 Nothing is written to the database before the merchant taps "confirm".
 When the agent asks a question, the merchant answers it on the card (handle_clarification)
 and the note is planned again; still nothing is written before the tap.
+
+Every step returns a `trace` entry: which model was used, its latency, the source
+(mock / spark-audio / voice_transcribe), and the reason it asked a question.
+The UI shows this trace so the agent is *verifiable*, not a black box.
 """
 import json
 import time
@@ -10,7 +14,7 @@ import uuid
 
 from .. import config, lexicon, models_client
 from ..numbers_mg import to_digits
-from . import reconciler, verifier
+from . import answers, preview, reconciler, verifier
 
 
 def _context(conn) -> dict:
@@ -32,26 +36,84 @@ def normalize_ear(conn, text: str) -> str:
     return lexicon.normalize(conn, text) if config.LEXICON_ON else text
 
 
+def _ear_trace(step: str, result: dict, ms: int) -> dict:
+    """One trace entry for an ear. Shows model, source, latency — visible in the UI."""
+    if config.BACKEND == "mock":
+        model = "mock"
+    elif step == "ear1":
+        model = {"voice_transcribe": config.MODEL_TRANSCRIBE, "whisper": config.WHISPER_MODEL,
+                 "off": None}.get(config.EAR1_MODE, config.MODEL_EAR1)
+    elif step == "ear2":
+        model = config.MODEL_EAR2
+    else:
+        model = None
+    return {
+        "step": step,
+        "model": model,
+        "source": result.get("source"),
+        "ms": ms,
+        "text": (result.get("text") or "")[:160],
+        "dropped": result.get("dropped", False),
+        "error": result.get("error"),
+    }
+
+
 def handle_voice(conn, audio: bytes, mime: str, hint_text: str | None = None) -> dict:
     t0 = time.perf_counter()
+    trace = []
     ctx = _context(conn)
     kw = lexicon.keywords(conn) if config.LEXICON_ON else []
     if not config.LEXICON_ON:
         ctx["lexicon"] = ""
 
+    # Ear 1
+    t = time.perf_counter()
     ear1 = models_client.transcribe(audio, mime, kw, hint_text)
-    ear2 = models_client.listen_with_spark(audio, mime, ctx["lexicon"], hint_text) if config.EAR2_ON else {"text": ""}
+    trace.append(_ear_trace("ear1", ear1, round((time.perf_counter() - t) * 1000)))
+
+    # Ear 2
+    t = time.perf_counter()
+    ear2 = models_client.listen_with_spark(audio, mime, ctx["lexicon"], hint_text) if config.EAR2_ON else {"text": "", "source": "off"}
+    trace.append(_ear_trace("ear2", ear2, round((time.perf_counter() - t) * 1000)))
+
     raw = {"ear1": ear1["text"], "ear2": ear2["text"]}
     n1, n2 = normalize_ear(conn, raw["ear1"]), normalize_ear(conn, raw["ear2"])
-    rec = reconciler.reconcile(n1, n2, kw)  # respects LEXICON_ON (was lexicon.keywords(conn))
+    trace.append({
+        "step": "normalize",
+        "ear1": n1[:160],
+        "ear2": n2[:160],
+        "lexicon_on": config.LEXICON_ON,
+        "changed": (n1 != raw["ear1"]) or (n2 != raw["ear2"]),
+    })
+
+    rec = reconciler.reconcile(n1, n2, kw)
+    trace.append({
+        "step": "reconcile",
+        "agree": rec["agree"],
+        "conflicts": rec.get("conflicts", []),
+        "question": rec.get("question"),
+    })
+
     if config.BACKEND == "mock" and audio and not hint_text and not n1 and not n2:
         rec["question"] = "Mode mock (tsy misy API key): tsy henoina ny feo. Soraty eto ambany ny fanamarihana."
 
     if not rec["agree"]:
         verdict = verifier.verify(conn, [], rec)
         verdict["options"] = rec["options"]
-        return _store_pending(conn, rec["text"], n1, n2, [], verdict, t0, raw)
-    return _plan_and_store(conn, rec["text"], n1, n2, ctx, t0, raw)
+        preview.attach(conn, verdict)  # adds the spoken question
+        return _store_pending(conn, rec["text"], n1, n2, [], verdict, t0, raw, trace)
+
+    # Plan
+    t = time.perf_counter()
+    calls = models_client.plan(rec["text"], ctx)
+    trace.append({
+        "step": "plan",
+        "model": config.MODEL_PLANNER if config.BACKEND != "mock" else "mock",
+        "ms": round((time.perf_counter() - t) * 1000),
+        "calls": [{"tool": c["tool"], "args": c.get("args")} for c in calls],
+    })
+
+    return _finish(conn, rec["text"], n1, n2, calls, t0, raw, trace)
 
 
 def handle_clarification(conn, pending_id: str, choice: str | None = None, text: str | None = None) -> dict:
@@ -76,26 +138,60 @@ def handle_clarification(conn, pending_id: str, choice: str | None = None, text:
         ctx["lexicon"] = ""
     # Plan FIRST, then delete the old pending. If planning fails, the old pending survives
     # (the merchant can retry instead of ending up with nothing to confirm).
-    result = _plan_and_store(conn, note, row["ear1"], row["ear2"], ctx, t0)
+    clarify_trace = [{"step": "clarify", "choice": choice, "text": (text or "")[:160]}]
+    result = _plan_and_store(conn, note, row["ear1"], row["ear2"], ctx, t0, raw=None, trace=clarify_trace)
     conn.execute("DELETE FROM pending_plans WHERE id=?", (pending_id,))
     return result
 
 
-def _plan_and_store(conn, text, ear1, ear2, ctx, t0, raw=None) -> dict:
+def _plan_and_store(conn, text, ear1, ear2, ctx, t0, raw=None, trace=None) -> dict:
     calls = models_client.plan(text, ctx)
-    verdict = verifier.verify(conn, calls)
-    return _store_pending(conn, text, ear1, ear2, calls, verdict, t0, raw)
+    trace = list(trace or []) + [
+        {"step": "plan", "model": config.MODEL_PLANNER if config.BACKEND != "mock" else "mock",
+         "calls": [{"tool": c["tool"], "args": c.get("args")} for c in calls]}]
+    return _finish(conn, text, ear1, ear2, calls, t0, raw, trace)
+
+
+def _finish(conn, text, ear1, ear2, calls, t0, raw=None, trace=None) -> dict:
+    """After planning: a question is answered from the database (nothing to confirm, nothing written);
+    actions are verified, previewed (balances before → after) and stored for the ✓ tap."""
+    trace = list(trace or [])
+    questions = [c for c in calls if c["tool"] == "ask_ledger"]
+    actions = [c for c in calls if c["tool"] != "ask_ledger"]
+    ans = answers.answer(conn, questions) if questions else None
+    if ans:
+        trace.append({"step": "answer", "source": "database", "text": ans["text"][:160]})
+    if questions and not actions:
+        raw = raw or {"ear1": ear1, "ear2": ear2}
+        return {"kind": "answer", "answer": ans, "transcript": text,
+                "ears": {"ear1": raw["ear1"], "ear2": raw["ear2"]}, "plan": calls,
+                "verdict": {"level": "answer", "lines": [], "issues": []},
+                "latency_ms": int((time.perf_counter() - t0) * 1000), "trace": trace}
+    verdict = verifier.verify(conn, actions)
+    preview.attach(conn, verdict)
+    if ans:
+        verdict["answer"] = ans
+    trace.append({"step": "verify", "level": verdict["level"], "issues": verdict.get("issues", [])})
+    return _store_pending(conn, text, ear1, ear2, actions, verdict, t0, raw, trace)
 
 
 def handle_plan(conn, calls: list[dict], transcript: str) -> dict:
     """Used by the notebook photo import: calls come from Spark vision."""
     verdict = verifier.verify(conn, calls)
-    return _store_pending(conn, transcript, None, None, calls, verdict, time.perf_counter())
+    preview.attach(conn, verdict)
+    trace = [
+        {"step": "vision", "source": "spark-vision",
+         "model": config.MODEL_VISION if config.BACKEND != "mock" else "mock",
+         "calls": [{"tool": c["tool"], "args": c.get("args")} for c in calls]},
+        {"step": "verify", "level": verdict["level"], "issues": verdict.get("issues", [])},
+    ]
+    return _store_pending(conn, transcript, None, None, calls, verdict, time.perf_counter(), trace=trace)
 
 
-def _store_pending(conn, text, ear1, ear2, calls, verdict, t0, raw=None) -> dict:
+def _store_pending(conn, text, ear1, ear2, calls, verdict, t0, raw=None, trace=None) -> dict:
     """ear1/ear2 are stored normalised (they are the choices offered on the card);
-    `raw` keeps what each ear really heard, for display and evaluation."""
+    `raw` keeps what each ear really heard, for display and evaluation.
+    `trace` is the reasoning trace shown in the UI — which model, how long, why it asked."""
     pid = str(uuid.uuid4())
     conn.execute(
         "INSERT INTO pending_plans(id, transcript, ear1, ear2, plan_json, verdict_json) VALUES (?,?,?,?,?,?)",
@@ -103,10 +199,12 @@ def _store_pending(conn, text, ear1, ear2, calls, verdict, t0, raw=None) -> dict
     )
     raw = raw or {"ear1": ear1, "ear2": ear2}
     return {
+        "kind": "plan",
         "pending_id": pid,
         "transcript": text,
         "ears": {"ear1": raw["ear1"], "ear2": raw["ear2"]},
         "plan": calls,
         "verdict": verdict,
         "latency_ms": int((time.perf_counter() - t0) * 1000),
+        "trace": trace or [],
     }
