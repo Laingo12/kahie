@@ -90,8 +90,9 @@ def attach(conn, verdict: dict) -> dict:
     for c in verdict["preview"]["customers"]:
         if c["after"] < 0 <= c["before"]:
             verdict.setdefault("issues", []).append(
-                {"level": "warn", "msg": f"{ar(c['before'])} ihany ny trosan'i {c['name']}: "
-                                         f"mihoatra {ar(-c['after'])} ny vola naloa. Marina ve?"})
+                {"level": "warn", "msg": (f"Tsy manana trosa i {c['name']}, nefa misy vola naloa {ar(c['before'] - c['after'])}"
+                                          if c["before"] <= 0 else
+                                          f"{ar(c['before'])} ihany ny trosan'i {c['name']}, mihoatra {ar(-c['after'])} ny vola naloa")})
             verdict["level"] = "warn"
     verdict["summary"] = summary(verdict["lines"], verdict["preview"])
     verdict["speak"] = speakify(verdict["summary"])

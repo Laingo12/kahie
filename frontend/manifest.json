@@ -1,11 +1,10 @@
 {
   "name": "Kahie — cahier vocal",
   "short_name": "Kahie",
-  "start_url": "/",
+  "start_url": "./",
   "display": "standalone",
-  "background_color": "#f8fafc",
-  "theme_color": "#1e293b",
-  "icons": [
-    {"src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}
-  ]
+  "background_color": "#fbf3e6",
+  "theme_color": "#fbf3e6",
+  "lang": "mg",
+  "icons": [{ "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
 }

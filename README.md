@@ -47,15 +47,30 @@ A shopkeeper speaks a note in Malagasy (often mixed with French):
 
 Malagasy is **not** among the languages Voice Transcribe can be biased toward. Measuring how far two ears and a learning lexicon close that gap is the core result of this project.
 
-## Two-way voice
+## Two-Way Voice (Hands-Free)
 
-Kahie doesn't just listen. When it needs a clarification it **speaks the question out loud** (Web Speech API, the phone's closest voice) in everyday Malagasy, and the shopkeeper **answers by voice** — no typing, no reading required.
+Kahie is designed for a busy market. The shopkeeper taps the mic once, and from there the conversation is voice-only. Kahie speaks the planned action aloud in Malagasy — *"Soratana ve fa naka vary 3 kapoaka i Rabe, nandoa 2 000 Ar, ary mbola manana trosa 1 000 Ar?"* — using Gemini TTS when the server has a key, otherwise the device's closest voice with a phonetic respelling (`to_phonetic_mg`: o → ou, j → dz, e → é…), and listens for the answer through the **same Meta ears** as the notes. The shopkeeper simply says *"Eny"* (yes) to confirm, and the transaction is written to the hash chain.
 
-1. The note is spoken → Kahie reads the card back: *"Rabe naka vary 3 kapoaka, telo arivo Ariary. Trosa vaovao arivo Ariary. Marina ve?"*
-2. The microphone opens **only after** Kahie has finished speaking, and closes 1.2 s after the shopkeeper goes quiet.
-3. *"Eny"* writes (same as the ✓ tap) and Kahie reads back what was written: *"Voasoratra: varotra telo arivo Ariary, trosa arivo Ariary."* *"Tsia"* cancels.
-4. A question is answered the same way: *"Firy marina: 2000 sa 3000?"* → *"roa arivo"* picks that reading; *"Inona no entana?"* → *"siramamy roa kilao"* completes the note, which is planned again.
-5. Safety: Kahie's own question heard back by the mic (*"… Marina ve?"*) or a long sentence is never taken as a yes; nothing is written without a clear *eny* or the ✓ tap. The buttons always stay available.
+Human in the loop, by design:
+1. The microphone opens **only after** Kahie has finished speaking, and closes 1.2 s after the shopkeeper goes quiet.
+2. Only a clear *eny / marina / ok / oui* writes; *tsia / diso / non* cancels; anything else → *"Eny sa tsia?"* (asked once more, softer).
+3. Kahie's own question heard back by the mic (anything containing *"ve"*, or a long sentence) is **never** taken as a yes.
+4. A warning is spoken **before** the question: *"Tandremo: 1 000 Ar ihany ny trosan'i Rabe, mihoatra 2 000 Ar ny vola naloa. Soratana ve fa…?"*
+5. Questions are answered the same way: *"Firy marina: 2000 sa 3000?"* → *"roa arivo"* picks that reading; *"Inona no entana?"* → *"siramamy roa kilao"* completes the note, which is planned, grounded and verified again.
+6. The ✓ / Ovaina buttons always stay; tapping one stops the listening. Every write can be undone.
+
+**Conversation mode — no more taps.** One tap on the mic opens the conversation (browsers require one gesture for the microphone and for sound; after a reload, one tap anywhere resumes it). From then on Kahie keeps listening between its own sentences: notes, questions, *eny / tsia*, and spoken commands, all through the Meta ears. Commands are recognised **before** the planner, so they never become ledger lines (`backend/app/agent/commands.py`):
+
+| Say | Kahie does |
+|---|---|
+| *Asehoy ny tabilao* | opens the dashboard and reads today's sales and total debt |
+| *Tatitra* | opens the weekly statement and says whether the hash chain is intact |
+| *Foano ilay farany* | asks *"Hofoanana ve ilay farany: « … »?"* — undoes only after a clear *eny* |
+| *Avereno* / *Tsy re* | says the card or the question again (never taken as a "no") |
+| *Miverena* · *Fanampiana* | back to the main screen · lists what can be said |
+| *Ajanony* | stops listening |
+
+Silence is never sent: the recorder only keeps audio once the level stays above the room's noise for 0.3 s.
 
 Every spoken sentence comes from one table (`backend/app/phrases.py`, exported to `docs/phrases.json`): two variants per state — direct the first time, softer when Kahie has to ask again.
 
@@ -189,7 +204,8 @@ for c in A B C D; do python eval/run_eval.py --config $c --out eval/results-$c.j
 
 ```text
 backend/app/
-  main.py              FastAPI: /api/voice /reply /image /clarify /confirm /undo /lexicon /report /alerts /debt /statement /verify /health
+  main.py              FastAPI: /api/voice /reply /undo_reply /image /clarify /confirm /undo /lexicon /report /alerts /debt /statement /verify /health
+  tts.py               Optional server voice (/api/speak, Gemini TTS) — off without GEMINI_API_KEY
   config.py            Settings from .env
   models_client.py     Meta Model API: Voice Transcribe (ear 1), Spark audio (ear 2), planner, vision + offline mock
   numbers_mg.py        Spoken Malagasy/French numbers ↔ digits (roa amby telopolo ↔ 32), speakify() for speech
@@ -208,6 +224,7 @@ backend/app/
     preview.py         Automatic calculation shown on the card (before → after) + spoken summary
     dialogue.py        Two-way voice: yes/no, which reading was confirmed, answer merged into the note
     grounding.py       Every number and name in a plan must have been said
+    commands.py        Hands-free voice commands (tabilao, tatitra, foano ilay farany, avereno, ajanony)
     tools.json         Tool schema sent to Spark (5 write/clarify tools + ask_ledger)
 frontend/              PWA, no build step (index.html, app.js, styles.css, sw.js, manifest.json)
 eval/
@@ -215,7 +232,7 @@ eval/
   cases.jsonl          60 cases (30 mg, 20 mix, 10 fr; 6 must be asked)
   run_eval.py          Scores exact lines, critical errors, questions, latency per config
   day1_test.py         First real API check → docs/day1.md
-tests/                 API flow, numbers, two ears, lexicon, clarification, Voice Transcribe request, answers, preview
+tests/                 API flow, numbers, two ears, lexicon, clarification, Voice Transcribe request, answers, preview, units, two-way voice, no-hallucination, TTS (all offline)
 deploy/                systemd unit, nginx (HTTPS via certbot), setup.sh, deploy.sh
 docs/                  meta-api-notes.md, day1.md, submission.md
 ```
@@ -227,7 +244,9 @@ Not in the repository on purpose: `.env` (the API key), `data/` and `*.db`, `eva
 - **Malagasy speech recognition** is the open question; the audio results above will say how well the Meta models handle it.
 - **Config D (open weights)** is not run yet — it needs partner credits (Baseten / Modal / Fireworks). The code path exists (`models_client._client(open_weights=True)`).
 - **Ear 1 alternatives** (`EAR1_MODE`): `spark_literal` (Spark with a literal prompt — same model as ear 2, so not an independent ear) and `whisper` (not a Meta model; optional comparison only). The default is Voice Transcribe.
-- **Speech** uses the phone's own speech synthesiser. Browsers ship no Malagasy voice, so Kahie uses one if the phone has it, otherwise a French voice reading Malagasy text (understandable, accent imperfect).
+- **Speech** uses the phone's own speech synthesiser by default. Browsers ship no Malagasy voice, so Kahie uses one if the phone has it, otherwise a French voice reading Malagasy text (understandable, accent imperfect).
+  Optional: with `GEMINI_API_KEY` set, Kahie's replies are read by Google Gemini TTS (`/api/speak`). This is **not a Meta model**: it only reads aloud sentences Kahie already wrote, never writes to the ledger, and any failure falls back to the phone's voice.
+- **Conversation mode** needs one tap when the app opens (browser rule for microphone and sound). In a noisy market, background voices can start a recording; the Meta ears and the guards then reject it or Kahie asks — nothing is written without *eny*. Every utterance is one or two API calls.
 - **Notebook photo** goes through one Spark vision call; long handwritten pages may need line-by-line reading (roadmap: SAM 3.1 line segmentation).
 - **Numbers:** "X sy Y arivo" multiplies only Y (*dimy amby roapolo sy zato arivo* → 100 025, not 125 000). Shop notes rarely say this; the confirmation card shows the amount before anything is written.
 - **Audio drop guard:** the Spark audio ear may silently drop audio on some tiers — `listen_with_spark` checks `prompt_tokens` and reports `dropped: true` instead of guessing.

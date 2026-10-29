@@ -11,6 +11,7 @@ import tempfile
 from pathlib import Path
 
 os.environ["KAHIE_BACKEND"] = "mock"
+os.environ["GEMINI_API_KEY"] = ""          # server voice off in tests
 os.environ.setdefault("KAHIE_DB", str(Path(tempfile.mkdtemp()) / "test.db"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
@@ -29,4 +30,5 @@ def offline(monkeypatch):
     monkeypatch.setattr(config, "BACKEND", "mock")
     monkeypatch.setattr(models_client, "_client", _no_network)
     monkeypatch.setattr(httpx, "post", _no_network)
+    monkeypatch.setattr(config, "GEMINI_API_KEY", "")
     yield

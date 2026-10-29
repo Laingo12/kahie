@@ -681,5 +681,15 @@ body::before {
 .voice-reply { display: block; width: 100%; margin: 12px 0 0; padding: 12px; border-radius: 12px; border: 1px dashed var(--accent);
   background: transparent; color: var(--accent); font: inherit; font-weight: 700; cursor: pointer; }
 
+.card-ask { margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; background: #fdf3e6; color: var(--primary);
+  font-weight: 700; font-size: 15px; line-height: 1.4; }
+
 /* `hidden` must always win (the empty toast and the install button were showing) */
 [hidden] { display: none !important; }
+
+/* Hands-free conversation */
+.wake { margin: 8px auto 0; max-width: 420px; padding: 10px 12px; border-radius: 10px; text-align: center;
+  background: #fdf3e6; color: var(--primary, #69220c); font-weight: 700; }
+.say-help { margin: 10px auto 0; max-width: 460px; font-size: 14px; color: var(--text-muted, #6b5a4e); }
+.say-help summary { cursor: pointer; text-align: center; }
+.say-help ul { margin: 8px 0 0; padding-left: 18px; line-height: 1.6; }

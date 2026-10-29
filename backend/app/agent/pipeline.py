@@ -14,8 +14,8 @@ import uuid
 
 from .. import config, lexicon, models_client, units
 from .. import phrases
-from ..numbers_mg import to_digits
-from . import answers, grounding, preview, reconciler, verifier
+from ..numbers_mg import speakify, to_digits
+from . import answers, commands, grounding, preview, reconciler, verifier
 
 
 def _context(conn) -> dict:
@@ -90,6 +90,15 @@ def handle_voice(conn, audio: bytes, mime: str, hint_text: str | None = None) ->
         "lexicon_on": config.LEXICON_ON,
         "changed": (n1 != raw["ear1"]) or (n2 != raw["ear2"]),
     })
+
+    # Hands-free voice command ("asehoy ny tabilao", "foano ilay farany"…): answered before any planning.
+    for heard in (n1, n2):
+        cmd = commands.detect(heard)
+        if cmd:
+            trace.append({"step": "command", "command": cmd, "text": heard})
+            out = commands.respond(conn, cmd, heard)
+            out.update({"ears": raw, "trace": trace, "latency_ms": int((time.perf_counter() - t0) * 1000)})
+            return out
 
     rec = reconciler.reconcile(n1, n2, kw)
     trace.append({
@@ -211,10 +220,66 @@ def handle_plan(conn, calls: list[dict], transcript: str) -> dict:
     return _store_pending(conn, transcript, None, None, calls, verdict, time.perf_counter(), trace=trace)
 
 
+def _said_qty(qty, unit) -> str:
+    """How a quantity is said: "mofo 10" (pieces need no unit), "siramamy 500 g", "vary 3 kapoaka"."""
+    return f"{qty:g}" if units.normalize(unit) == "isa" else units.fmt_qty(qty, unit)
+
+
+def _spoken_confirmation(verdict: dict) -> str:
+    """The yes/no question Kahie reads aloud before anything is written.
+
+    clarify    → the question itself ("Firy marina: 2000 sa 3000?")
+    ok / warn  → "Soratana ve fa naka vary 3 kapoaka i Rabe, ary mbola manana trosa 1 000 Ar?"
+                 (a warning is read first: "Tandremo: … ." so the shopkeeper hears why to check)
+    Quantities are said in the unit the shopkeeper used; amounts come from the verifier, never the model.
+    """
+    if verdict.get("level") == "clarify":
+        return verdict.get("question") or ""
+    lines = verdict.get("lines") or []
+    if verdict.get("level") not in ("ok", "warn") or not lines:
+        return ""
+    sales, debts, parts = {}, {}, []
+    for ln in lines:
+        if ln["kind"] == "sale":
+            sales.setdefault(ln.get("customer"), []).append(ln)
+        elif ln["kind"] == "debt":
+            debts[ln["customer"]] = debts.get(ln["customer"], 0) + ln["amount"]
+    for who, items in sales.items():
+        goods = " sy ".join(f"{ln['product']} {_said_qty(ln['qty'], ln['unit'])}" for ln in items)
+        total = sum(ln["total"] for ln in items)
+        part = f"naka {goods} i {who}" if who else f"nisy olona tsy fantatra naka {goods}"
+        owed = debts.pop(who, 0) if who else 0
+        if owed and owed < total:
+            part += f", nandoa {answers.ar(total - owed)}, ary mbola manana trosa {answers.ar(owed)}"
+        elif owed:
+            part += f", ary mbola manana trosa {answers.ar(owed)}"
+        else:
+            part += f", ary nandoa {answers.ar(total)}"
+        prior = next((c for c in (verdict.get("preview") or {}).get("customers", []) if c["name"] == who and c["before"] > 0), None)
+        if owed and prior:   # the shopkeeper hears the new total, not only today's part
+            part += f" (lasa {answers.ar(prior['after'])} ny trosany rehetra)"
+        parts.append(part)
+    for ln in lines:
+        if ln["kind"] == "debt" and ln["customer"] in debts:            # a loan without a sale
+            parts.append(f"nindrana {answers.ar(debts.pop(ln['customer']))} i {ln['customer']}")
+        elif ln["kind"] == "payment":
+            parts.append(f"nandoa trosa {answers.ar(ln['amount'])} i {ln['customer']}")
+        elif ln["kind"] == "stock":
+            q = _said_qty(abs(ln.get("delta_spoken", ln["delta"])), ln.get("unit") or ln.get("base_unit", ""))
+            parts.append(f"niditra {ln['product']} {q}" if ln["delta"] > 0 else f"simba na very {ln['product']} {q}")
+    question = "Soratana ve fa " + " ary ".join(parts) + "?"
+    warnings = [i["msg"] for i in verdict.get("issues", []) if i.get("level") == "warn"]
+    return (f"Tandremo: {'; '.join(w.rstrip('. ') for w in warnings)}. " if warnings else "") + question
+
+
 def _store_pending(conn, text, ear1, ear2, calls, verdict, t0, raw=None, trace=None) -> dict:
     """ear1/ear2 are stored normalised (they are the choices offered on the card);
     `raw` keeps what each ear really heard, for display and evaluation.
     `trace` is the reasoning trace shown in the UI — which model, how long, why it asked."""
+    spoken = _spoken_confirmation(verdict)
+    if spoken:
+        verdict["spoken_confirmation"] = spoken
+        verdict["speak"] = speakify(spoken)       # what the phone reads aloud (numbers in Malagasy words)
     pid = str(uuid.uuid4())
     conn.execute(
         "INSERT INTO pending_plans(id, transcript, ear1, ear2, plan_json, verdict_json) VALUES (?,?,?,?,?,?)",
@@ -230,7 +295,7 @@ def _store_pending(conn, text, ear1, ear2, calls, verdict, t0, raw=None, trace=N
         "verdict": verdict,
         "latency_ms": int((time.perf_counter() - t0) * 1000),
         "trace": trace or [],
-        "spoken_confirmation": models_client.spoken_confirmation(verdict),
+        "spoken_confirmation": spoken,
     }
 
 def hear_short(conn, audio: bytes, mime: str, hint_text: str | None = None) -> dict:

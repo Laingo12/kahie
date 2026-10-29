@@ -33,6 +33,33 @@ PHRASES = {
                          "Eny ary, tsy soratako."],
     "listening":        ["Henoiko…",
                          "Lazao fa mihaino aho…"],
+    # --- voice commands (hands-free) ---
+    "hello":            ["Manao ahoana! Henoiko ianao.",
+                         "Miverina aho. Henoiko ianao."],
+    "cmd_dash":         ["Ity ny tabilao. Varotra androany: {sales}. Trosa rehetra: {debt}.",
+                         "Tabilao: varotra androany {sales}, trosa rehetra {debt}."],
+    "cmd_statement":    ["Tatitra herinandro: varotra {sales}, trosa naloa {repaid}. {seal}",
+                         "Ity ny tatitra herinandro: varotra {sales}, trosa naloa {repaid}. {seal}"],
+    "seal_ok":          ["Tsy nisy nokitihina ny diary.",
+                         "Madio ny diary."],
+    "seal_bad":         ["Tandremo: nisy nanova ny diary.",
+                         "Tandremo: simba ny diary."],
+    "cmd_home":         ["Vonona aho. Mitenena.",
+                         "Henoiko ianao."],
+    "cmd_help":         ["Azonao lazaina hoe: Rabe naka vary telo kapoaka, nandoa roa arivo. "
+                         "Na: iza no manana trosa? Na: asehoy ny tabilao. Na: foano ilay farany. Na: ajanony.",
+                         "Lazao fotsiny izay nolafoina, na manontania hoe: iza no manana trosa? "
+                         "Raha hijanona aho: ajanony."],
+    "cmd_stop":         ["Mijanona aho. Tsindrio ny mikrô raha hiresaka indray.",
+                         "Veloma tompoko. Tsindrio ny mikrô raha hiresaka indray."],
+    "cmd_undo_ask":     ["Hofoanana ve ilay farany: « {what} »?",
+                         "Azafady, foanako ve ilay « {what} »? Eny sa tsia?"],
+    "cmd_undo_none":    ["Tsy misy azo foanana.",
+                         "Mbola tsy misy voasoratra azo foanana."],
+    "undone":           ["Nofoanana.",
+                         "Vita, nofoanana ilay izy."],
+    "not_undone":       ["Tsy nofoanana.",
+                         "Eny ary, tazomina ilay izy."],
 }
 
 

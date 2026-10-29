@@ -3,53 +3,84 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#1e293b">
+  <meta name="theme-color" content="#fbf3e6">
+  <meta name="description" content="Kahie — cahier vocal malagasy. Transforme les notes vocales des commerçants en cahier de comptes vérifié.">
   <title>Kahie — cahier vocal</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon.svg">
   <link rel="stylesheet" href="styles.css">
+  <meta property="og:title" content="Kahie — the voice ledger that speaks Malagasy">
+  <meta property="og:description" content="A shopkeeper speaks Malagasy; Kahie writes a verified ledger. Meta Global AI Developer Hackathon 2026.">
+  <meta property="og:image" content="https://kahie.votra-google.it/img/poster.jpg">
+  <meta name="twitter:card" content="summary_large_image">
 </head>
 <body>
   <header class="top">
-    <div class="brand">
-      <!-- Namerina ny logo kely raha misy -->
-      <img src="img/logo-k.png" alt="K" class="logo-k" onerror="this.style.display='none'">
-      Kahie <span class="tag">cahier vocal</span>
+    <div class="brand"><img class="logo" src="img/logo-k.png" alt="">Kahie <span class="tag">cahier vocal</span></div>
+    <div class="top-right">
+      <button id="voice" class="voice" title="Feo: miteny / mangina" aria-label="Feo">🔊</button>
+      <div id="net" class="net" title="Réseau">●</div>
     </div>
-    <div id="net" class="net" title="Réseau">●</div>
   </header>
 
   <main>
     <!-- 1. Record -->
     <section id="screen-record" class="screen active" aria-label="Raketo">
-      <p class="hint">Tsindrio ny bokotra dia mitenena: malagasy, frantsay na samy hafa.</p>
+      <p class="hint">Tsindrio indray mandeha ny mikrô, dia miresaha fotsiny: malagasy, frantsay na samy hafa.</p>
+      <button id="mic" class="mic" aria-label="Atombohy na ajanony ny resaka">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V22h2v-3.08A7 7 0 0 0 19 12h-2Z"/></svg>
+      </button>
+      <div id="rec-state" class="rec-state">Vonona — tsindrio ny mikrô</div>
+      <div id="wake" class="wake" hidden>👆 Tsindrio na aiza na aiza indray mandeha: hiresaka indray i Kahie</div>
+      <details class="say-help">
+        <summary>Inona no azoko lazaina?</summary>
+        <ul>
+          <li>« Rabe naka vary telo kapoaka, nandoa roa arivo »</li>
+          <li>« Iza no manana trosa? » · « Ohatrinona ny varotra androany? »</li>
+          <li>« Eny » / « Tsia » · « Avereno »</li>
+          <li>« Asehoy ny tabilao » · « Tatitra » · « Miverena »</li>
+          <li>« Foano ilay farany » · « Ajanony »</li>
+        </ul>
+      </details>
 
-      <div class="mic-wrapper">
-        <button id="mic" class="mic" aria-label="Raketo feo">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V22h2v-3.08A7 7 0 0 0 19 12h-2Z"/></svg>
-        </button>
+      <!-- Kahie answers questions about the ledger (read-only, computed from the database) -->
+      <div id="answer-box" class="answer-box" hidden aria-live="polite">
+        <div class="answer-head"><img src="img/logo-k.png" alt=""><b>Kahie</b>
+          <button id="answer-replay" class="replay" title="Henoy indray" aria-label="Henoy indray">🔊</button></div>
+        <p id="answer-q" class="answer-q"></p>
+        <p id="answer-text" class="answer-text"></p>
+        <ul id="answer-rows" class="answer-rows"></ul>
       </div>
 
-      <div id="rec-state" class="rec-state">Vonona</div>
-
-      <!-- Ireo chips/suggestions ireo (raha tianao ampiasaina) -->
-      <div class="chips" id="chips">
-        <button class="chip">Iza no manana trosa?</button>
-        <button class="chip">Varotra androany</button>
-        <button class="chip">Inona no ho lany?</button>
+      <div class="chips" aria-label="Fanontaniana haingana">
+        <button data-q="Iza avy no mbola tsy nandoa trosa?">Iza no manana trosa?</button>
+        <button data-q="Ohatrinona ny varotra androany?">Varotra androany</button>
+        <button data-q="Inona no efa ho lany?">Inona no ho lany?</button>
+        <button data-q="Iza no manana trosa efa ela?">Trosa efa ela</button>
       </div>
+
+      <!-- Live report: refreshed after every ✓ and every undo -->
+      <section id="mini" class="mini" aria-label="Tatitra androany">
+        <div class="mini-kpis">
+          <div><span>Varotra androany</span><b id="m-sales">–</b></div>
+          <div><span>Trosa rehetra</span><b id="m-debt">–</b></div>
+        </div>
+        <ul id="m-debtors" class="mini-list"></ul>
+        <div id="m-low" class="mini-low" hidden></div>
+      </section>
 
       <details class="typed">
         <summary>Soraty fa tsy lazaina</summary>
         <form id="typed-form">
-          <input id="typed" placeholder="Rabe naka 3 kapoaka vary, nandoa 2000 Ar" autocomplete="off">
+          <input id="typed" placeholder="Rabe naka siramamy 500 g, nandoa 1000 Ar" autocomplete="off">
           <button type="submit">Alefa</button>
         </form>
       </details>
 
       <label class="photo-btn">
         <input id="photo" type="file" accept="image/*" capture="environment" hidden>
-        🖼️ Sary ny kahie (import des dettes)
+        📷 Alaivo sary ny kahie (hampidirana ny trosa)
       </label>
 
       <div id="queue" class="queue" hidden></div>
@@ -62,6 +93,12 @@
         <div><span class="ear-label">Sofina 2 · Spark</span><p id="ear2"></p></div>
       </div>
       <div id="card" class="card"></div>
+      <!-- Two-way voice: after Kahie speaks, it listens for the answer ("eny", "tsia", "roa arivo", "Rabe"…) -->
+      <div id="listen-bar" class="listen-bar" hidden aria-live="polite">
+        <span class="dot"></span><span id="listen-text">Henoiko…</span>
+        <button id="listen-stop" type="button">Ajanony</button>
+      </div>
+      <button id="btn-voice-reply" class="voice-reply" type="button">🎙️ Valio amin'ny feo</button>
       <div class="actions">
         <button id="btn-fix" class="ghost">Ovaina</button>
         <button id="btn-ok" class="primary">✓ Marina</button>
@@ -76,8 +113,8 @@
         <div class="kpi"><span>Trosa rehetra</span><b id="k-debt">–</b></div>
       </div>
       <h3>Trosa</h3><ul id="debts" class="list"></ul>
-      <h3>Tahiry ambany</h3><ul id="low" class="list"></ul>
-      <h3>Diary</h3><ul id="journal" class="list journal"></ul>
+      <h3>Entana efa ho lany</h3><ul id="low" class="list"></ul>
+      <h3>Diary (izay voasoratra)</h3><ul id="journal" class="list journal"></ul>
     </section>
 
     <!-- 4. Statement -->
@@ -92,12 +129,9 @@
     <button data-screen="statement"><span class="ico">🧾</span><span>Tatitra</span></button>
   </nav>
 
-  <button id="install" class="install" hidden>📲 Installa an'i Kahie</button>
+  <button id="install" class="install" hidden>📲 Apetraho ao amin'ny finday i Kahie</button>
 
   <div id="toast" class="toast" hidden></div>
-
-  <!-- DEBUG BOX (Afeno, mipoitra raha misy olana) -->
-  <div id="debug-box" style="display:none; position:fixed; bottom:70px; left:10px; right:10px; max-height:80px; overflow-y:auto; background:rgba(255,255,255,0.95); font-family:monospace; font-size:10px; padding:6px; border-radius:6px; z-index:9999; pointer-events:none; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"></div>
 
   <script src="app.js"></script>
 </body>

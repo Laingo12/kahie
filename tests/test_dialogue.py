@@ -72,3 +72,37 @@ def test_success_reads_the_numbers():
     assert speakify(phrases.success(lines)) == "Voasoratra: varotra telo arivo Ariary, trosa arivo Ariary."
     assert "no mbola trosa" in phrases.success(lines, 1)
     assert phrases.success([{"kind": "payment", "customer": "Soa", "amount": 1500}]) == "Voasoratra: nandoa 1 500 Ar i Soa."
+
+
+# ---------------------------------------------------------------- the spoken yes/no question
+def _confirmation(text, conn=None):
+    conn = conn or _db()
+    return pipeline.handle_voice(conn, b"", "audio/webm", hint_text=text)
+
+
+def _db():
+    conn = db.connect(Path(tempfile.mkdtemp()) / "t.db"); db.init(conn); db.seed_demo(conn)
+    return conn
+
+
+@pytest.mark.parametrize("note, spoken", [
+    ("Rabe naka telo kapoaka vary, nandoa roa arivo Ariary",
+     "Soratana ve fa naka vary 3 kapoaka i Rabe, nandoa 2 000 Ar, ary mbola manana trosa 1 000 Ar?"),
+    ("Soa naka siramamy dimanjato grama", "Soratana ve fa naka siramamy 500 g i Soa, ary nandoa 1 600 Ar?"),
+    ("Mofo folo no lafo tamin'ny olona tsy fantatra",
+     "Soratana ve fa nisy olona tsy fantatra naka mofo 10, ary nandoa 3 000 Ar?"),
+    ("Bodo nindrana roa arivo Ariary", "Soratana ve fa nindrana 2 000 Ar i Bodo?"),
+    ("Soa nandoa ny trosany, telo arivo sy dimanjato",
+     "Tandremo: Tsy manana trosa i Soa, nefa misy vola naloa 3 500 Ar. Soratana ve fa nandoa trosa 3 500 Ar i Soa?"),
+    ("Tonga ny vary, kapoaka dimampolo", "Soratana ve fa niditra vary 50 kapoaka?"),
+    ("Simba ny menaka valo litatra", "Soratana ve fa simba na very menaka 8 litatra?"),
+    ("Bodo naka zavatra", "Inona no entana?"),
+])
+def test_spoken_confirmation(note, spoken):
+    r = _confirmation(note)
+    assert r["spoken_confirmation"] == spoken and r["verdict"]["speak"]
+
+
+def test_spoken_confirmation_is_never_a_yes_when_heard_back():
+    r = _confirmation("Rabe naka telo kapoaka vary, nandoa roa arivo Ariary")
+    assert dialogue.yes_no(r["verdict"]["speak"]) is None
