@@ -230,6 +230,7 @@ def _store_pending(conn, text, ear1, ear2, calls, verdict, t0, raw=None, trace=N
         "verdict": verdict,
         "latency_ms": int((time.perf_counter() - t0) * 1000),
         "trace": trace or [],
+        "spoken_confirmation": models_client.spoken_confirmation(verdict),
     }
 
 def hear_short(conn, audio: bytes, mime: str, hint_text: str | None = None) -> dict:
