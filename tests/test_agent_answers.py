@@ -71,7 +71,7 @@ def test_customer_balance_sales_stock_low_stock():
     _write(conn, "Rabe naka telo kapoaka vary, nandoa roa arivo Ariary")
     assert _say(conn, "Firy ny trosan'i Rabe?")["answer"]["text"] == "1 000 Ar ny trosan'i Rabe."
     assert "3 000 Ar" in _say(conn, "Ohatrinona ny varotra androany?")["answer"]["text"]
-    assert _say(conn, "Firy kapoaka ny vary sisa?")["answer"]["text"] == "Vary: 117 kapoaka sisa."
+    assert _say(conn, "Firy kapoaka ny vary sisa?")["answer"]["text"] == "117 kapoaka vary sisa."
     assert "Tsara daholo" in _say(conn, "Inona no efa ho lany?")["answer"]["text"]
     _write(conn, "Simba ny menaka valo litatra")
     assert _say(conn, "Inona no efa ho lany?")["answer"]["text"] == "Efa ho lany: menaka 7 litatra."
@@ -96,7 +96,7 @@ def test_preview_shows_balances_before_and_after():
     r = _say(conn, "Rabe naka siramamy efatra kapoaka, nandoa roa arivo")
     pv = r["verdict"]["preview"]
     assert pv["customers"] == [{"name": "Rabe", "before": 1000, "after": 2200}]
-    assert pv["products"] == [{"name": "siramamy", "unit": "kapoaka", "before": 60, "after": 56}]
+    assert pv["products"] == [{"name": "siramamy", "unit": "kg", "before": 15, "after": 14}]  # 4 kapoaka ≈ 1 kg
     assert pv["sales_today"] == {"before": 3000, "after": 6200}
     assert r["verdict"]["summary"].endswith("Marina ve?") and "2 200 Ar" in r["verdict"]["summary"]
     assert "roa arivo sy roanjato" in r["verdict"]["speak"]
@@ -106,7 +106,7 @@ def test_overpayment_asks_for_a_reinforced_confirmation():
     conn = _fresh()
     _write(conn, "Rabe naka telo kapoaka vary, nandoa roa arivo Ariary")      # owes 1000
     v = _say(conn, "Rabe nanefa trosa telo arivo")["verdict"]
-    assert v["level"] == "warn" and any("be loatra" in i["msg"] for i in v["issues"])
+    assert v["level"] == "warn" and any("mihoatra" in i["msg"] for i in v["issues"])
 
 
 def test_clarification_question_is_spoken():

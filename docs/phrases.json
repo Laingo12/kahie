@@ -1,0 +1,119 @@
+{
+  "_note": "Source of truth: backend/app/phrases.py. [0] direct, [1] softer. 'spoken' = what the speech synthesiser reads (numbers in Malagasy words).",
+  "phrases": {
+    "clarify_amount": [
+      "Firy marina: {a} sa {b}?",
+      "Azafady, {a} ve sa {b} no marina?"
+    ],
+    "clarify_name": [
+      "Iza na inona marina: {a} sa {b}?",
+      "Azafady, {a} ve sa {b}?"
+    ],
+    "clarify_customer": [
+      "Iza no mitrosa?",
+      "Azafady, iza no mbola tsy nandoa ny ambiny?"
+    ],
+    "clarify_product": [
+      "Inona no entana?",
+      "Azafady, inona ilay entana nalainy?"
+    ],
+    "clarify_unknown_product": [
+      "Tsy fantatro ny « {product} ». Inona marina?",
+      "Azafady, inona marina ilay « {product} »?"
+    ],
+    "clarify_quantity": [
+      "Firy ny {product}?",
+      "Azafady, firy ny {product} nalainy?"
+    ],
+    "clarify_who_amount": [
+      "Iza ary ohatrinona?",
+      "Azafady, iza no nandoa, ary ohatrinona?"
+    ],
+    "not_heard": [
+      "Tsy re tsara. Avereno azafady.",
+      "Miala tsiny, tsy henoko tsara. Averinao ve?"
+    ],
+    "not_said": [
+      "Tsy re ny « {missing} ». Avereno azafady.",
+      "Azafady, lazao mazava indray ny « {missing} »."
+    ],
+    "confirm_tail": [
+      "Marina ve?",
+      "Ekenao ve?"
+    ],
+    "yes_or_no": [
+      "Eny sa tsia?",
+      "Azafady, lazao hoe « eny » na « tsia »."
+    ],
+    "cancelled": [
+      "Tsy voasoratra.",
+      "Eny ary, tsy soratako."
+    ],
+    "listening": [
+      "Henoiko…",
+      "Lazao fa mihaino aho…"
+    ],
+    "success": [
+      "Voasoratra: varotra 3 000 Ar, trosa 1 000 Ar.",
+      "Tafiditra ao amin'ny kahie: varotra 3 000 Ar, ary 1 000 Ar no mbola trosa."
+    ]
+  },
+  "spoken_examples": {
+    "clarify_amount": [
+      "Firy marina: roa arivo sa telo arivo?",
+      "Azafady, roa arivo ve sa telo arivo no marina?"
+    ],
+    "clarify_name": [
+      "Iza na inona marina: roa arivo sa telo arivo?",
+      "Azafady, roa arivo ve sa telo arivo?"
+    ],
+    "clarify_customer": [
+      "Iza no mitrosa?",
+      "Azafady, iza no mbola tsy nandoa ny ambiny?"
+    ],
+    "clarify_product": [
+      "Inona no entana?",
+      "Azafady, inona ilay entana nalainy?"
+    ],
+    "clarify_unknown_product": [
+      "Tsy fantatro ny « siramamy ». Inona marina?",
+      "Azafady, inona marina ilay « siramamy »?"
+    ],
+    "clarify_quantity": [
+      "Firy ny siramamy?",
+      "Azafady, firy ny siramamy nalainy?"
+    ],
+    "clarify_who_amount": [
+      "Iza ary ohatrinona?",
+      "Azafady, iza no nandoa, ary ohatrinona?"
+    ],
+    "not_heard": [
+      "Tsy re tsara. Avereno azafady.",
+      "Miala tsiny, tsy henoko tsara. Averinao ve?"
+    ],
+    "not_said": [
+      "Tsy re ny « roa arivo ». Avereno azafady.",
+      "Azafady, lazao mazava indray ny « roa arivo »."
+    ],
+    "confirm_tail": [
+      "Marina ve?",
+      "Ekenao ve?"
+    ],
+    "yes_or_no": [
+      "Eny sa tsia?",
+      "Azafady, lazao hoe « eny » na « tsia »."
+    ],
+    "cancelled": [
+      "Tsy voasoratra.",
+      "Eny ary, tsy soratako."
+    ],
+    "listening": [
+      "Henoiko…",
+      "Lazao fa mihaino aho…"
+    ],
+    "success": [
+      "Voasoratra: varotra telo arivo Ariary, trosa arivo Ariary.",
+      "Tafiditra ao amin'ny kahie: varotra telo arivo Ariary, ary arivo Ariary no mbola trosa."
+    ]
+  }
+}

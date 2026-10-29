@@ -27,7 +27,7 @@
   <main>
     <!-- 1. Record -->
     <section id="screen-record" class="screen active" aria-label="Raketo">
-      <p class="hint">Tsindrio ary mitenena — malagasy, frantsay na mifangaro.</p>
+      <p class="hint">Tsindrio ny bokotra dia mitenena: malagasy, frantsay na samy hafa.</p>
       <button id="mic" class="mic" aria-label="Raketo feo">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V22h2v-3.08A7 7 0 0 0 19 12h-2Z"/></svg>
       </button>
@@ -60,16 +60,16 @@
       </section>
 
       <details class="typed">
-        <summary>Soraty (test)</summary>
+        <summary>Soraty fa tsy lazaina</summary>
         <form id="typed-form">
-          <input id="typed" placeholder="Rabe naka 3 kapoaka vary, nandoa 2000 Ar" autocomplete="off">
+          <input id="typed" placeholder="Rabe naka siramamy 500 g, nandoa 1000 Ar" autocomplete="off">
           <button type="submit">Alefa</button>
         </form>
       </details>
 
       <label class="photo-btn">
         <input id="photo" type="file" accept="image/*" capture="environment" hidden>
-        📷 Sary ny kahie (import des dettes)
+        📷 Alaivo sary ny kahie (hampidirana ny trosa)
       </label>
 
       <div id="queue" class="queue" hidden></div>
@@ -82,6 +82,12 @@
         <div><span class="ear-label">Sofina 2 · Spark</span><p id="ear2"></p></div>
       </div>
       <div id="card" class="card"></div>
+      <!-- Two-way voice: after Kahie speaks, it listens for the answer ("eny", "tsia", "roa arivo", "Rabe"…) -->
+      <div id="listen-bar" class="listen-bar" hidden aria-live="polite">
+        <span class="dot"></span><span id="listen-text">Henoiko…</span>
+        <button id="listen-stop" type="button">Ajanony</button>
+      </div>
+      <button id="btn-voice-reply" class="voice-reply" type="button">🎙️ Valio amin'ny feo</button>
       <div class="actions">
         <button id="btn-fix" class="ghost">Ovaina</button>
         <button id="btn-ok" class="primary">✓ Marina</button>
@@ -96,8 +102,8 @@
         <div class="kpi"><span>Trosa rehetra</span><b id="k-debt">–</b></div>
       </div>
       <h3>Trosa</h3><ul id="debts" class="list"></ul>
-      <h3>Tahiry ambany</h3><ul id="low" class="list"></ul>
-      <h3>Diary</h3><ul id="journal" class="list journal"></ul>
+      <h3>Entana efa ho lany</h3><ul id="low" class="list"></ul>
+      <h3>Diary (izay voasoratra)</h3><ul id="journal" class="list journal"></ul>
     </section>
 
     <!-- 4. Statement -->
@@ -112,7 +118,7 @@
     <button data-screen="statement"><span class="ico">🧾</span><span>Tatitra</span></button>
   </nav>
 
-  <button id="install" class="install" hidden>📲 Installa an'i Kahie</button>
+  <button id="install" class="install" hidden>📲 Apetraho ao amin'ny finday i Kahie</button>
 
   <div id="toast" class="toast" hidden></div>
 

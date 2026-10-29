@@ -25,12 +25,13 @@ def execute(conn, transcript: str, plan: list, verdict: dict, kind: str = "execu
         for ln in verdict["lines"]:
             if ln["kind"] == "sale":
                 pid, cid = _product_id(conn, ln["product"]), _customer_id(conn, ln["customer"])
+                qty = ln.get("base_qty", ln["qty"])  # stock and sales are kept in the product's base unit
                 sid = conn.execute(
                     "INSERT INTO sales(customer_id, product_id, qty, unit_price, total, audit_id) VALUES (?,?,?,?,?,?)",
-                    (cid, pid, ln["qty"], ln["unit_price"], ln["total"], aid)).lastrowid
-                conn.execute("UPDATE products SET stock = stock - ? WHERE id=?", (ln["qty"], pid))
+                    (cid, pid, qty, ln.get("base_price", ln["unit_price"]), ln["total"], aid)).lastrowid
+                conn.execute("UPDATE products SET stock = stock - ? WHERE id=?", (qty, pid))
                 conn.execute("INSERT INTO stock_moves(product_id, delta, reason, audit_id) VALUES (?,?,?,?)",
-                             (pid, -ln["qty"], "sale", aid))
+                             (pid, -qty, "sale", aid))
                 written.append({"table": "sales", "id": sid})
             elif ln["kind"] in ("debt", "payment"):
                 amount = ln["amount"] if ln["kind"] == "debt" else -ln["amount"]

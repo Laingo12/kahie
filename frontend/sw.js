@@ -1,6 +1,6 @@
 // Cache the app shell so Kahie opens without network. API calls are never cached.
 // Bump this on every deploy, or phones keep the old app.js (cache-first).
-const CACHE = "kahie-v8";
+const CACHE = "kahie-v11";
 const SHELL = [
   "./",
   "index.html",

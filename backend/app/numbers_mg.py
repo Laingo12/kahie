@@ -173,7 +173,13 @@ def to_words(n: int) -> str:
 
 
 def speakify(text: str) -> str:
-    """Text for the speech synthesiser: every number in words, "Ar" → "Ariary"."""
-    text = re.sub(r"\d{1,3}(?:[   ]\d{3})+|\d+", lambda m: to_words(int(re.sub(r"\D", "", m.group()))), text or "")
+    """Text for the speech synthesiser: numbers in Malagasy words, decimals with "faingo"
+    (14,5 → "efatra ambin'ny folo faingo dimy"), "Ar" → "Ariary", "kg" → "kilao", "g" → "grama"."""
+    text = text or ""
+    text = re.sub(r"(\d)\s*kg(?!\w)", r"\1 kilao", text)
+    text = re.sub(r"(\d)\s*g(?!\w)", r"\1 grama", text)
+    text = re.sub(r"(?<![\d,.])(\d+)[,.](\d+)(?![\d,.])",
+                  lambda m: f"{to_words(int(m.group(1)))} faingo {to_words(int(m.group(2)))}", text)
+    text = re.sub(r"\d{1,3}(?:[ \u00a0\u202f]\d{3})+|\d+", lambda m: to_words(int(re.sub(r"\D", "", m.group()))), text)
     text = re.sub(r"(?<!\w)Ar(?!\w)", "Ariary", text)
     return text.replace("\u00a0", " ").replace("\u202f", " ")

@@ -31,8 +31,9 @@ A shopkeeper speaks a note in Malagasy (often mixed with French):
 7. Every correction **teaches the lexicon** (`kapwaka → kapoaka`, `savon → savony`): it is sent as keywords to Voice Transcribe and as context to Spark, so the next note is heard correctly.
 8. **Automatic calculation on the card**, before anything is written: the customer's debt *before → after*, the stock *before → after*, today's sales *before → after*. A repayment larger than the debt triggers a reinforced confirmation.
 9. **Ask Kahie**: *"Iza avy no mbola tsy nandoa trosa?"* → *"Olona 2 no mbola manana trosa: Naivo 1 400 Ar, Rabe 1 000 Ar."* The planner only chooses the question (`ask_ledger`); every name and number in the answer comes from SQL, so the agent cannot invent a debt. Questions never write.
-10. **Kahie speaks**: answers and the confirmation card are read aloud, with amounts in Malagasy words (*roa arivo sy valonjato Ariary*) — for shopkeepers who prefer listening to reading.
-11. **Aged debts** are flagged (who has owed for more than 7 days), and a **weekly statement** sealed by the head of the hash chain is the first step toward a verifiable credit history.
+10. **Sold by weight**: sugar and flour are kept in kg; a note can say *dimanjato grama*, *antsasaky ny kilao*, *roa kilao sy sasany* or *telo kapoaka* — every unit is converted to the product's base unit (`units.py`, per-product kapoaka weights), so stock, price and total stay consistent. An impossible unit (*siramamy roa litatra*) is a question.
+11. **Kahie speaks**: answers and the confirmation card are read aloud, with amounts in Malagasy words (*roa arivo sy valonjato Ariary*) — for shopkeepers who prefer listening to reading.
+12. **Aged debts** are flagged (who has owed for more than 7 days), and a **weekly statement** sealed by the head of the hash chain is the first step toward a verifiable credit history.
 
 ## Meta models used
 
@@ -45,6 +46,30 @@ A shopkeeper speaks a note in Malagasy (often mixed with French):
 | Muse Spark Open (`muse-spark-open-1026`) | Same agent on open weights — config D, *not run yet* |
 
 Malagasy is **not** among the languages Voice Transcribe can be biased toward. Measuring how far two ears and a learning lexicon close that gap is the core result of this project.
+
+## Two-way voice
+
+Kahie doesn't just listen. When it needs a clarification it **speaks the question out loud** (Web Speech API, the phone's closest voice) in everyday Malagasy, and the shopkeeper **answers by voice** — no typing, no reading required.
+
+1. The note is spoken → Kahie reads the card back: *"Rabe naka vary 3 kapoaka, telo arivo Ariary. Trosa vaovao arivo Ariary. Marina ve?"*
+2. The microphone opens **only after** Kahie has finished speaking, and closes 1.2 s after the shopkeeper goes quiet.
+3. *"Eny"* writes (same as the ✓ tap) and Kahie reads back what was written: *"Voasoratra: varotra telo arivo Ariary, trosa arivo Ariary."* *"Tsia"* cancels.
+4. A question is answered the same way: *"Firy marina: 2000 sa 3000?"* → *"roa arivo"* picks that reading; *"Inona no entana?"* → *"siramamy roa kilao"* completes the note, which is planned again.
+5. Safety: Kahie's own question heard back by the mic (*"… Marina ve?"*) or a long sentence is never taken as a yes; nothing is written without a clear *eny* or the ✓ tap. The buttons always stay available.
+
+Every spoken sentence comes from one table (`backend/app/phrases.py`, exported to `docs/phrases.json`): two variants per state — direct the first time, softer when Kahie has to ask again.
+
+## No hallucination by design
+
+| Where a model could invent | Guard |
+|---|---|
+| An empty or silent recording | The WAV is checked **before** any API call (length ≥ 0.4 s, not silent): "tsy nisy feo re", no credits spent |
+| An ear that talks about the audio instead of transcribing it ("Aucun audio reçu…", our own prompt echoed) | `audio_guard.clean()` rejects it; the ear is empty, the reason is in the trace, the text is **never** offered as a choice |
+| A transcript too long for the recording | More than ~4.5 words per second is rejected |
+| Spark asked to transcribe | The prompt says: if you hear nothing, answer exactly `(silence)` — never invent words |
+| The planner "completing" a note (a quantity for *Rabe naka vary*, a customer, an amount) | `grounding.check()`: every number and customer name in the plan must appear in what was said, otherwise the agent asks |
+| The planner replying in prose | A long or off-topic reply becomes "Tsy azoko tsara. Avereno azafady." |
+| Answers to questions | Names and numbers come from SQL only (`answers.py`) |
 
 ## Verifiable agent (not a black box)
 
@@ -164,10 +189,13 @@ for c in A B C D; do python eval/run_eval.py --config $c --out eval/results-$c.j
 
 ```text
 backend/app/
-  main.py              FastAPI: /api/voice /image /clarify /confirm /undo /lexicon /report /alerts /debt /statement /verify /health
+  main.py              FastAPI: /api/voice /reply /image /clarify /confirm /undo /lexicon /report /alerts /debt /statement /verify /health
   config.py            Settings from .env
   models_client.py     Meta Model API: Voice Transcribe (ear 1), Spark audio (ear 2), planner, vision + offline mock
   numbers_mg.py        Spoken Malagasy/French numbers ↔ digits (roa amby telopolo ↔ 32), speakify() for speech
+  units.py             kg · g · kapoaka · litatra · isa, conversions per product, half-kilos in words
+  phrases.py           Everything Kahie says, in spoken Malagasy (2 variants per state)
+  audio_guard.py       Silence/length checks before any call; rejects replies that are not transcripts
   lexicon.py           Learned lexicon → keywords, prompt, normalize()
   audit.py             Hash chain (append, set_result, verify)
   db.py, schema.sql    SQLite tables + fictional demo shop
@@ -178,6 +206,8 @@ backend/app/
     executor.py        Transaction + audit + undo
     answers.py         Read-only answers to questions (who owes, balance, sales, stock) from SQL
     preview.py         Automatic calculation shown on the card (before → after) + spoken summary
+    dialogue.py        Two-way voice: yes/no, which reading was confirmed, answer merged into the note
+    grounding.py       Every number and name in a plan must have been said
     tools.json         Tool schema sent to Spark (5 write/clarify tools + ask_ledger)
 frontend/              PWA, no build step (index.html, app.js, styles.css, sw.js, manifest.json)
 eval/

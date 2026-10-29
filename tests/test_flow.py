@@ -74,3 +74,34 @@ def test_card_carries_the_automatic_calculation():
     r = client.post("/api/voice", data={"text": "Bodo naka roa kapoaka vary"}).json()
     pv = r["verdict"]["preview"]
     assert pv["products"][0]["after"] == pv["products"][0]["before"] - 2 and r["verdict"]["summary"]
+
+
+# ---------------------------------------------------------------- two-way voice (/api/reply)
+def _pending(text):
+    return client.post("/api/voice", data={"text": text}).json()
+
+
+def test_spoken_yes_writes_and_reads_back_the_numbers():
+    p = _pending("Soa naka roa kapoaka vary, nandoa arivo")
+    r = client.post("/api/reply", data={"pending_id": p["pending_id"], "text": "Eny"}).json()
+    assert r["action"] == "confirmed" and r["audit_id"] and "arivo" in r["speak"]
+
+
+def test_spoken_no_cancels_and_writes_nothing():
+    before = conn.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0]
+    p = _pending("Soa naka roa kapoaka vary")
+    r = client.post("/api/reply", data={"pending_id": p["pending_id"], "text": "Tsia"}).json()
+    assert r["action"] == "cancelled"
+    assert conn.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0] == before
+
+
+def test_echo_of_the_card_is_not_a_yes():
+    p = _pending("Soa naka roa kapoaka vary")
+    r = client.post("/api/reply", data={"pending_id": p["pending_id"], "text": "Soa naka vary 2 kapoaka. Marina ve?"}).json()
+    assert r["action"] == "repeat" and r["speak"]
+
+
+def test_spoken_answer_to_a_question_replans():
+    p = _pending("Bodo naka zavatra")
+    r = client.post("/api/reply", data={"pending_id": p["pending_id"], "text": "siramamy roa kilao"}).json()
+    assert r["action"] == "plan" and r["result"]["verdict"]["lines"][0]["product"] == "siramamy"

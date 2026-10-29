@@ -23,14 +23,22 @@
                   "type": "string"
                 },
                 "qty": {
-                  "type": "number"
+                  "type": "number",
+                  "description": "Quantité dite, peut être décimale (antsasany = 0.5)"
                 },
                 "unit_price": {
                   "type": [
                     "integer",
                     "null"
                   ],
-                  "description": "Prix unitaire en Ar si dit, sinon null"
+                  "description": "Prix en Ar pour UNE unité dite (unit), si dit ; sinon null"
+                },
+                "unit": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Unité dite : kg, g, kapoaka, litatra, isa… null = unité habituelle du produit"
                 }
               },
               "required": [
@@ -66,7 +74,7 @@
           },
           "delta": {
             "type": "number",
-            "description": "Positif = entrée (réapprovisionnement), négatif = perte"
+            "description": "Quantité : positive = entrée (réapprovisionnement), négative = perte"
           },
           "reason": {
             "type": "string",
@@ -74,6 +82,13 @@
               "restock",
               "loss"
             ]
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Unité dite : kg, g, kapoaka, litatra, isa… null = unité habituelle"
           }
         },
         "required": [

@@ -12,9 +12,10 @@ import json
 import time
 import uuid
 
-from .. import config, lexicon, models_client
+from .. import config, lexicon, models_client, units
+from .. import phrases
 from ..numbers_mg import to_digits
-from . import answers, preview, reconciler, verifier
+from . import answers, grounding, preview, reconciler, verifier
 
 
 def _context(conn) -> dict:
@@ -22,7 +23,8 @@ def _context(conn) -> dict:
     customers = [r["name"] for r in conn.execute("SELECT name FROM customers")]
     return {
         "lexicon": lexicon.as_prompt(conn),
-        "products": ", ".join(f"{p['name']} ({p['unit']}, {p['unit_price']} Ar)" for p in products),
+        "products": ", ".join(f"{p['name']} ({p['unit_price']:g} Ar/{p['unit']}; unités: "
+                              f"{', '.join(units.accepted(p['name'], p['unit']))})" for p in products),
         "customers": ", ".join(customers) or "(aucun)",
         "product_list": [p["name"] for p in products],
         "customer_list": customers,
@@ -31,8 +33,9 @@ def _context(conn) -> dict:
 
 def normalize_ear(conn, text: str) -> str:
     """Same treatment for both ears before they are compared:
-    spoken numbers → digits (always), then learned mishearings → canonical words (if the lexicon is on)."""
-    text = to_digits(text or "")
+    spoken numbers → digits and halves → decimals ("antsasaky ny kilao" → "0.5 kg") always,
+    then learned mishearings → canonical words (if the lexicon is on)."""
+    text = units.normalize_text(text or "")
     return lexicon.normalize(conn, text) if config.LEXICON_ON else text
 
 
@@ -55,6 +58,8 @@ def _ear_trace(step: str, result: dict, ms: int) -> dict:
         "text": (result.get("text") or "")[:160],
         "dropped": result.get("dropped", False),
         "error": result.get("error"),
+        "rejected": result.get("rejected"),       # text refused as a transcript (kept for the trace only)
+        "seconds": result.get("seconds"),
     }
 
 
@@ -95,7 +100,7 @@ def handle_voice(conn, audio: bytes, mime: str, hint_text: str | None = None) ->
     })
 
     if config.BACKEND == "mock" and audio and not hint_text and not n1 and not n2:
-        rec["question"] = "Mode mock (tsy misy API key): tsy henoina ny feo. Soraty eto ambany ny fanamarihana."
+        rec["question"] = "Tsy misy API key (mode mock): tsy afaka mihaino feo aho. Soraty eto ambany ilay izy."
 
     if not rec["agree"]:
         verdict = verifier.verify(conn, [], rec)
@@ -167,7 +172,25 @@ def _finish(conn, text, ear1, ear2, calls, t0, raw=None, trace=None) -> dict:
                 "ears": {"ear1": raw["ear1"], "ear2": raw["ear2"]}, "plan": calls,
                 "verdict": {"level": "answer", "lines": [], "issues": []},
                 "latency_ms": int((time.perf_counter() - t0) * 1000), "trace": trace}
+    # Grounding: numbers and customer names in the plan must have been said (no invented values).
+    heard = {}
+    for r in conn.execute("SELECT heard, canonical FROM lexicon WHERE kind = 'product'"):
+        heard.setdefault(r["canonical"].lower(), []).append(r["heard"])
+    g = grounding.check(text, actions, heard)
+    trace.append({"step": "grounding", "source": "transcript", "missing": g["missing"],
+                  "unsure_products": g["unsure_products"]})
+    if g["missing"] and not any(c["tool"] == "ask_clarification" for c in actions):
+        verdict = {"level": "clarify", "lines": [], "issues": [],
+                   "question": phrases.say("not_said", missing=", ".join(g["missing"]))}
+        preview.attach(conn, verdict)
+        trace.append({"step": "verify", "level": "clarify", "issues": []})
+        return _store_pending(conn, text, ear1, ear2, actions, verdict, t0, raw, trace)
     verdict = verifier.verify(conn, actions)
+    for name in g["unsure_products"]:
+        if verdict.get("level") != "clarify":
+            verdict.setdefault("issues", []).append(
+                {"level": "warn", "msg": f"Tsy re mazava ny entana « {name} »: hamarino"})
+            verdict["level"] = "warn"
     preview.attach(conn, verdict)
     if ans:
         verdict["answer"] = ans
@@ -208,3 +231,13 @@ def _store_pending(conn, text, ear1, ear2, calls, verdict, t0, raw=None, trace=N
         "latency_ms": int((time.perf_counter() - t0) * 1000),
         "trace": trace or [],
     }
+
+def hear_short(conn, audio: bytes, mime: str, hint_text: str | None = None) -> dict:
+    """A short spoken answer ("eny", "roa arivo", "Rabe"): one ear is enough.
+    Voice Transcribe first (fast, dedicated ASR), Spark audio if it heard nothing. Guards apply as for notes."""
+    kw = lexicon.keywords(conn) if config.LEXICON_ON else []
+    out = models_client.transcribe(audio, mime, kw, hint_text)
+    if not (out.get("text") or "").strip() and audio and config.BACKEND != "mock":
+        out = models_client.listen_with_spark(audio, mime, lexicon.as_prompt(conn) if config.LEXICON_ON else "", hint_text)
+    return {"text": normalize_ear(conn, out.get("text") or ""), "raw": out.get("text") or "",
+            "source": out.get("source"), "error": out.get("error")}

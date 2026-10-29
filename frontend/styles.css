@@ -665,7 +665,21 @@ body::before {
 .pv-row b.low { color: #c2410c; }
 .card-answer { margin-top: 10px; font-size: 14px; color: var(--primary); }
 
-.toast span { white-space: nowrap; }
+.toast { width: min(92vw, 480px); }
+.toast span { white-space: normal; flex: 1; line-height: 1.35; }
+.toast button { flex: none; }
+
+.ears p.ear-empty { color: var(--text-muted); font-style: italic; }
+
+/* two-way voice */
+.listen-bar { display: flex; align-items: center; gap: 10px; margin: 12px 0 0; padding: 10px 14px; border-radius: 999px;
+  background: var(--primary); color: #fff; font-weight: 700; font-size: 14px; }
+.listen-bar .dot { width: 10px; height: 10px; border-radius: 50%; background: #ff7a4d; animation: pulse-dot 1s infinite; }
+.listen-bar button { margin-left: auto; border: 0; border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px;
+  background: rgba(255,255,255,.18); color: #fff; cursor: pointer; }
+@keyframes pulse-dot { 50% { opacity: .3; transform: scale(.8); } }
+.voice-reply { display: block; width: 100%; margin: 12px 0 0; padding: 12px; border-radius: 12px; border: 1px dashed var(--accent);
+  background: transparent; color: var(--accent); font: inherit; font-weight: 700; cursor: pointer; }
 
 /* `hidden` must always win (the empty toast and the install button were showing) */
 [hidden] { display: none !important; }

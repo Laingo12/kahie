@@ -8,6 +8,7 @@ and a short sentence the app can read aloud. Read-only.
 """
 from datetime import date
 
+from .. import units
 from ..numbers_mg import speakify
 from .answers import ar
 
@@ -23,7 +24,7 @@ def compute(conn, lines: list[dict]) -> dict:
         k = ln["kind"]
         if k == "sale":
             p = products.setdefault(ln["product"], {"delta": 0})
-            p["delta"] -= ln["qty"]
+            p["delta"] -= ln.get("base_qty", ln["qty"])
             sales_add += ln["total"]
         elif k == "stock":
             p = products.setdefault(ln["product"], {"delta": 0})
@@ -53,25 +54,29 @@ def compute(conn, lines: list[dict]) -> dict:
 
 
 def summary(lines: list[dict], preview: dict) -> str:
-    """One sentence for the card, read aloud: what will be written and the new balances."""
+    """One sentence for the card, read aloud: what will be written and the new balances.
+    Quantities are said in the unit the shopkeeper used ("siramamy 500 g")."""
     parts = []
     for ln in lines:
         if ln["kind"] == "sale":
-            who = f"{ln['customer']}: " if ln.get("customer") else ""
-            parts.append(f"{who}{ln['product']} {_qty(ln['qty'])} {ln['unit']}, {ar(ln['total'])}")
+            who = f"{ln['customer']} naka " if ln.get("customer") else "Lafo: "
+            parts.append(f"{who}{ln['product']} {units.fmt_qty(ln['qty'], ln['unit'])}, {ar(ln['total'])}")
         elif ln["kind"] == "debt":
             parts.append(f"trosa vaovao {ar(ln['amount'])}")
         elif ln["kind"] == "payment":
             parts.append(f"{ln['customer']} nandoa {ar(ln['amount'])}")
         elif ln["kind"] == "stock":
-            parts.append(f"{ln['product']} {'miditra' if ln['delta'] > 0 else 'mivoaka'} {_qty(abs(ln['delta']))}")
+            q = units.fmt_qty(abs(ln.get("delta_spoken", ln["delta"])), ln.get("unit") or ln.get("base_unit", ""))
+            parts.append(f"{ln['product']} {q} niditra" if ln["delta"] > 0 else f"{ln['product']} {q} simba na very")
     for c in preview["customers"]:
         parts.append(f"ny trosan'i {c['name']} lasa {ar(max(c['after'], 0))}" if c["after"] > 0
                      else f"tsy manana trosa intsony i {c['name']}")
     for p in preview["products"]:
         if p["after"] < 10:
-            parts.append(f"{p['name']} {_qty(p['after'])} {p['unit']} sisa")
-    return ". ".join(x[0].upper() + x[1:] for x in parts) + ". Marina ve?" if parts else ""
+            parts.append(f"{units.fmt_qty(max(p['after'], 0), p['unit'])} {p['name']} sisa")
+    if not parts:
+        return ""
+    return ". ".join(x[0].upper() + x[1:] for x in parts) + ". Marina ve?"
 
 
 def attach(conn, verdict: dict) -> dict:
@@ -85,7 +90,8 @@ def attach(conn, verdict: dict) -> dict:
     for c in verdict["preview"]["customers"]:
         if c["after"] < 0 <= c["before"]:
             verdict.setdefault("issues", []).append(
-                {"level": "warn", "msg": f"Mihoatra ny trosan'i {c['name']} ({ar(c['before'])}) ny vola naloa: {ar(-c['after'])} be loatra"})
+                {"level": "warn", "msg": f"{ar(c['before'])} ihany ny trosan'i {c['name']}: "
+                                         f"mihoatra {ar(-c['after'])} ny vola naloa. Marina ve?"})
             verdict["level"] = "warn"
     verdict["summary"] = summary(verdict["lines"], verdict["preview"])
     verdict["speak"] = speakify(verdict["summary"])

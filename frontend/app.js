@@ -38,14 +38,18 @@ function pickVoice() {
   const vs = ("speechSynthesis" in window) ? speechSynthesis.getVoices() : [];
   return vs.find((v) => /^mg/i.test(v.lang)) || vs.find((v) => /^fr/i.test(v.lang)) || null;
 }
-function speak(text) {
-  if (!voiceOn || !text || !("speechSynthesis" in window)) return;
+// onEnd runs only when the speech really finished: the mic never opens while Kahie is talking
+// (otherwise it would hear its own "… Marina ve?").
+function speak(text, onEnd) {
+  if (!voiceOn || !text || !("speechSynthesis" in window)) return false;
   speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
   const v = pickVoice();
   if (v) { u.voice = v; u.lang = v.lang; } else { u.lang = "fr-FR"; }
   u.rate = 0.95;
+  if (onEnd) u.onend = () => setTimeout(onEnd, 300);
   speechSynthesis.speak(u);
+  return true;
 }
 if ("speechSynthesis" in window) speechSynthesis.onvoiceschanged = () => {};
 renderVoice();
@@ -79,7 +83,7 @@ async function dequeue(key) {
 async function renderQueue() {
   const q = await queued();
   $("#queue").hidden = q.length === 0;
-  $("#queue").textContent = `${q.length} feo miandry ny réseau (en attente)`;
+  $("#queue").textContent = `${q.length} feo miandry ny tambajotra`;
 }
 async function flushQueue() {
   if (!navigator.onLine) return;
@@ -109,6 +113,7 @@ $("#mic").onclick = async () => {
       stream.getTracks().forEach((t) => t.stop());
       $("#mic").classList.remove("rec");
       const blob = new Blob(chunks, { type: recorder.mimeType });
+      lastWasVoice = true;
       if (!navigator.onLine) { await enqueue(blob); $("#rec-state").textContent = "Voatahiry, halefa rehefa misy réseau"; return; }
       await sendVoice(blob);
     };
@@ -146,9 +151,9 @@ function showAnswer(res) {
   speak(a.speak);
 }
 $("#answer-replay").onclick = () => speak(lastAnswer);
-document.querySelectorAll(".chips button").forEach((b) => (b.onclick = () => sendVoice(null, b.dataset.q)));
+document.querySelectorAll(".chips button").forEach((b) => (b.onclick = () => { lastWasVoice = false; sendVoice(null, b.dataset.q); }));
 
-$("#typed-form").onsubmit = (e) => { e.preventDefault(); const v = $("#typed").value.trim(); if (v) sendVoice(null, v); };
+$("#typed-form").onsubmit = (e) => { e.preventDefault(); const v = $("#typed").value.trim(); if (v) { lastWasVoice = false; sendVoice(null, v); } };
 
 $("#photo").onchange = async (e) => {
   const f = e.target.files[0];
@@ -161,13 +166,25 @@ $("#photo").onchange = async (e) => {
 };
 
 // ---------------------------------------------------------------- confirmation card
+// Quantities: 0.5 kg → "500 g", 2.5 → "2,5" (decimal comma).
+function qtyFmt(q, unit) {
+  const n = Number(q);
+  if (unit === "kg" && n > 0 && n < 1) return `${Math.round(n * 1000)} g`;
+  return `${n.toLocaleString("fr-FR", { maximumFractionDigits: 3 })} ${esc(unit || "")}`;
+}
+
 // Model output and names go into the page: always escape them.
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 function renderCard(p) {
   current = p;
-  $("#ear1").textContent = p.ears.ear1 ?? "—";
-  $("#ear2").textContent = p.ears.ear2 ?? "—";
+  // An ear whose reading was rejected (silence, reply about the audio, implausible) shows WHY, never the rejected text.
+  for (const ear of ["ear1", "ear2"]) {
+    const heard = (p.ears && p.ears[ear]) || "";
+    const t = (p.trace || []).find((x) => x.step === ear);
+    $("#" + ear).textContent = heard || (t && t.error ? "— " + t.error : "—");
+    $("#" + ear).classList.toggle("ear-empty", !heard);
+  }
   const v = p.verdict;
   let html = "";
 
@@ -189,6 +206,8 @@ function renderCard(p) {
       if (t.question) html += `<div class="trace-q">→ ${esc(t.question)}</div>`;
       if (t.dropped) html += `<div class="trace-i">⚠ audio droppé (prompt_tokens bas)</div>`;
       if (t.error) html += `<div class="trace-i">⚠ ${esc(t.error)}</div>`;
+      if (t.rejected) html += `<div class="trace-i">✗ nolavina: « ${esc(t.rejected.slice(0, 120))} »</div>`;
+      if (t.missing && t.missing.length) html += `<div class="trace-i">✗ tsy re tao amin'ny feo: ${esc(t.missing.join(", "))}</div>`;
       if (t.level) html += `<div class="trace-c">level=${esc(t.level)}</div>`;
       if (t.issues && t.issues.length) {
         for (const i of t.issues) html += `<div class="trace-i">⚠ ${esc(i.msg)}</div>`;
@@ -216,10 +235,11 @@ function renderCard(p) {
       <button>Alefa</button></form>`;
   } else {
     for (const l of v.lines) {
-      if (l.kind === "sale") html += `<div class="row"><span>${esc(l.qty)} ${esc(l.unit)} ${esc(l.product)}${l.customer ? " · " + esc(l.customer) : ""}</span><span>${fmt(l.total)}</span></div>`;
+      if (l.kind === "sale") html += `<div class="row"><span>${qtyFmt(l.qty, l.unit)} ${esc(l.product)}${l.customer ? " · " + esc(l.customer) : ""}</span><span>${fmt(l.total)}</span></div>`;
       if (l.kind === "debt") html += `<div class="row debt"><span>Trosa · ${esc(l.customer)}</span><span>${fmt(l.amount)}</span></div>`;
       if (l.kind === "payment") html += `<div class="row"><span>Naloa · ${esc(l.customer)}</span><span>${fmt(l.amount)}</span></div>`;
-      if (l.kind === "stock") html += `<div class="row"><span>Tahiry ${esc(l.product)}</span><span>${l.delta > 0 ? "+" : ""}${esc(l.delta)}</span></div>`;
+      if (l.kind === "stock") html += `<div class="row"><span>${l.delta > 0 ? "Niditra" : "Simba / very"} · ${esc(l.product)}</span>` +
+        `<span>${l.delta > 0 ? "+" : "−"}${qtyFmt(Math.abs(l.delta_spoken ?? l.delta), l.unit || l.base_unit)}</span></div>`;
     }
     if (v.total) html += `<div class="row total"><span>Totaly</span><span>${fmt(v.total)}</span></div>`;
     for (const i of v.issues || []) html += `<div class="issue">⚠ ${esc(i.msg)}</div>`;
@@ -233,8 +253,86 @@ function renderCard(p) {
   $("#btn-ok").disabled = v.level === "clarify";
   $("#btn-ok").textContent = v.level === "warn" ? "✓ Marina ihany" : "✓ Marina";
   show("confirm");
-  speak(v.speak);
+  replyAttempt = 0;
+  // Two-way voice: if the note was spoken, Kahie reads the card / asks its question, then listens.
+  speak(v.speak, lastWasVoice ? () => listenReply() : null);
 }
+
+// ---------------------------------------------------------------- two-way voice
+let lastWasVoice = false, replyAttempt = 0, listening = null;
+
+// Record ONE short answer. Stops 1.2 s after the speaker goes quiet, or after 6 s.
+// Returns null if nobody spoke (nothing is sent, nothing is guessed).
+async function listenOnce({ maxMs = 6000, silenceMs = 1200, waitMs = 4000 } = {}) {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const an = ctx.createAnalyser(); an.fftSize = 2048;
+  ctx.createMediaStreamSource(stream).connect(an);
+  const buf = new Float32Array(an.fftSize);
+  const rec = new MediaRecorder(stream); const parts = [];
+  rec.ondataavailable = (e) => parts.push(e.data);
+  return new Promise((resolve) => {
+    let spoke = false, quietSince = null; const t0 = performance.now();
+    const finish = () => {
+      clearInterval(timer); if (rec.state !== "inactive") rec.stop();
+    };
+    rec.onstop = () => {
+      stream.getTracks().forEach((t) => t.stop()); ctx.close();
+      listening = null;
+      resolve(spoke ? new Blob(parts, { type: rec.mimeType }) : null);
+    };
+    const timer = setInterval(() => {
+      an.getFloatTimeDomainData(buf);
+      const rms = Math.sqrt(buf.reduce((s, x) => s + x * x, 0) / buf.length);
+      const now = performance.now();
+      if (rms > 0.02) { spoke = true; quietSince = null; }
+      else if (spoke) { quietSince = quietSince || now; if (now - quietSince > silenceMs) finish(); }
+      if ((!spoke && now - t0 > waitMs) || now - t0 > maxMs) finish();
+    }, 100);
+    // stop = "I finished talking" (send what was said); cancel = the shopkeeper tapped a button instead.
+    listening = { stop: finish, cancel: () => { spoke = false; finish(); } };
+    rec.start();
+  });
+}
+
+async function listenReply() {
+  if (!current || listening) return;
+  $("#listen-bar").hidden = false;
+  $("#btn-voice-reply").hidden = true;
+  $("#listen-text").textContent = current.verdict.level === "clarify" ? "Henoiko ny valinao…" : "Henoiko… (eny / tsia)";
+  let blob = null;
+  try { blob = await listenOnce(); } catch { $("#listen-bar").hidden = true; $("#btn-voice-reply").hidden = false; return; }   // no mic permission
+  $("#listen-bar").hidden = true;
+  $("#btn-voice-reply").hidden = false;
+  if (!blob || !current) return;              // nobody spoke: the card stays, the ✓ button still works
+  $("#listen-text").textContent = "Mandinika…";
+  const fd = new FormData();
+  fd.append("pending_id", current.pending_id);
+  fd.append("audio", blob, "reply.webm");
+  fd.append("attempt", String(replyAttempt));
+  const r = await fetch("api/reply", { method: "POST", body: fd });
+  if (!r.ok) { toast("Nisy olana, andramo indray"); return; }
+  handleReply(await r.json());
+}
+
+function handleReply(res) {
+  if (res.action === "confirmed") {
+    afterWrite(res);
+  } else if (res.action === "cancelled") {
+    current = null; show("record"); toast(res.message); speak(res.speak);
+  } else if (res.action === "repeat") {
+    replyAttempt += 1;
+    toast(res.message);
+    // Ask again once; after that, the buttons are there.
+    speak(res.speak, replyAttempt <= 1 ? () => listenReply() : null);
+  } else if (res.action === "plan") {
+    const p = res.result;
+    if (p.kind === "answer") showAnswer(p); else renderCard(p);
+  }
+}
+
+$("#listen-stop").onclick = () => listening && listening.stop();
+$("#btn-voice-reply").onclick = () => { if ("speechSynthesis" in window) speechSynthesis.cancel(); listenReply(); };
 
 // Automatic calculation: what the ledger will look like after ✓ (computed by the server, nothing written yet).
 function previewHtml(pv) {
@@ -247,7 +345,7 @@ function previewHtml(pv) {
       `<span>${fmt(c.before)} → <b class="${up ? "up" : "down"}">${fmt(Math.max(c.after, 0))}</b></span></div>`;
   }
   for (const p of pv.products || []) {
-    h += `<div class="pv-row"><span>Tahiry ${esc(p.name)}</span>` +
+    h += `<div class="pv-row"><span>${esc(p.name.charAt(0).toUpperCase() + p.name.slice(1))} sisa</span>` +
       `<span>${qty(p.before)} → <b class="${p.after < 10 ? "low" : ""}">${qty(p.after)}</b> ${esc(p.unit)}</span></div>`;
   }
   if (pv.sales_today) {
@@ -260,6 +358,7 @@ function previewHtml(pv) {
 // Answer the agent's question → a new plan, which still needs the ✓ tap.
 async function answer(body) {
   if (!current) return;
+  if (listening) listening.cancel();
   const r = await fetch("api/clarify", { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ pending_id: current.pending_id, ...body }) });
   if (!r.ok) { toast("Nisy olana, andramo indray"); return; }
@@ -268,30 +367,35 @@ async function answer(body) {
 
 $("#btn-ok").onclick = async () => {
   if (!current) return;
+  if (listening) listening.cancel();
   const r = await fetch("api/confirm", { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ pending_id: current.pending_id }) });
-  const res = await r.json();
+  afterWrite(await r.json());
+};
+
+function afterWrite(res) {
   current = null;
   $("#answer-box").hidden = true;
   show("record");            // stay ready for the next note
   loadMini();
-  toast("Voasoratra ✓", { label: "Foanana", run: () => undo(res.audit_id) });
-  speak("Voasoratra.");
+  toast(res.message || "Voasoratra ✓", { label: "Foanana", run: () => undo(res.audit_id) });
+  speak(res.speak || "Voasoratra.");
   flushQueue();
 };
 
 $("#btn-fix").onclick = async () => {
   if (!current) return;
+  if (listening) listening.cancel();
   // Nothing was heard (e.g. mic used in mock mode): ask for the whole note instead.
   if (!(current.transcript || "").trim()) {
-    const note = prompt("Tsy nisy re. Soraty ny fanamarihana :");
+    const note = prompt("Tsy nisy re. Soraty eto ilay izy:");
     if (note && note.trim()) await sendVoice(null, note.trim());
     return;
   }
   // Teach the lexicon, then re-plan: the server applies the new word itself (normalize_ear).
-  const heard = prompt("Teny diso (ce qui a été mal compris) :");
+  const heard = prompt("Inona ilay teny diso henony?");
   if (!heard) return;
-  const canonical = prompt(`Ny marina ho an'ny « ${heard} » :`);
+  const canonical = prompt(`Inona no tena izy fa tsy « ${heard} »?`);
   if (!canonical) return;
   await fetch("api/lexicon", { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ heard, canonical, kind: "word" }) });
@@ -344,13 +448,13 @@ async function loadDash() {
       const detail = r.lines.map((l) => {
         const isPay = l.amount < 0;
         const cls = isPay ? "pay" : (l.age_days >= 7 ? "old" : "");
-        return `<div class="row"><span>${esc(l.created_at.slice(0, 10))} · ${esc(l.reason || (isPay ? "naloa" : "trosa"))}</span>` +
+        return `<div class="row"><span>${esc(l.created_at.slice(0, 10))} · ${isPay ? "naloa" : "trosa"}</span>` +
           `<b>${isPay ? "−" : ""}${fmt(Math.abs(l.amount))}</b>` +
-          `<span class="age ${cls}">${isPay ? "" : l.age_days + "j"}</span></div>`;
+          `<span class="age ${cls}">${isPay ? "" : l.age_days + " andro"}</span></div>`;
       }).join("");
       li.insertAdjacentHTML("afterend",
-        `<li class="detail"><div class="detail-head">Fitambarany : <b>${fmt(r.total)}</b>` +
-        (r.oldest_days > 0 ? ` · tranainy ${r.oldest_days}j` : "") + `</div>${detail}</li>`);
+        `<li class="detail"><div class="detail-head">Fitambarany: <b>${fmt(r.total)}</b>` +
+        (r.oldest_days > 0 ? ` · efa ${r.oldest_days} andro` : "") + `</div>${detail}</li>`);
       li.onclick = null;  // don't stack expansions
     };
   });

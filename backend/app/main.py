@@ -7,8 +7,9 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import audit, config, db, lexicon, models_client
-from .agent import executor, pipeline
+from . import audit, config, db, lexicon, models_client, phrases
+from .agent import dialogue, executor, pipeline
+from .numbers_mg import speakify
 
 app = FastAPI(title="Kahie", version="0.1.0")
 conn = db.connect()
@@ -51,19 +52,67 @@ async def image(photo: UploadFile = File(...)):
     return pipeline.handle_plan(conn, calls, transcript="[photo du cahier]")
 
 
-@app.post("/api/confirm")
-def confirm(body: Confirm):
-    row = conn.execute("SELECT * FROM pending_plans WHERE id=?", (body.pending_id,)).fetchone()
+def _execute_pending(pending_id: str, corrections=()) -> dict:
+    row = conn.execute("SELECT * FROM pending_plans WHERE id=?", (pending_id,)).fetchone()
     if not row:
         raise HTTPException(404, "pending plan not found")
     verdict = json.loads(row["verdict_json"])
     if verdict["level"] == "clarify":
         raise HTTPException(409, "clarification needed before execution")
-    for c in body.corrections:
+    for c in corrections:
         lexicon.learn(conn, c.heard, c.canonical, c.kind)
     result = executor.execute(conn, row["transcript"], json.loads(row["plan_json"]), verdict)
-    conn.execute("DELETE FROM pending_plans WHERE id=?", (body.pending_id,))
+    conn.execute("DELETE FROM pending_plans WHERE id=?", (pending_id,))
+    result["message"] = phrases.success(verdict["lines"])
+    result["speak"] = speakify(result["message"])
     return result
+
+
+@app.post("/api/confirm")
+def confirm(body: Confirm):
+    return _execute_pending(body.pending_id, body.corrections)
+
+
+@app.post("/api/reply")
+async def reply(pending_id: str = Form(...), audio: UploadFile | None = File(None), text: str | None = Form(None),
+                attempt: int = Form(0)):
+    """Two-way voice: the shopkeeper's spoken answer to the card or to Kahie's question.
+
+    Card to confirm  → "eny" writes (same as ✓), "tsia" cancels, anything else → "Eny sa tsia?"
+    Question         → picks one of the two readings, or adds the answer to the note and plans again.
+    'text' lets tests and the mock mode skip ASR. 'attempt' > 0 uses the softer phrasing.
+    """
+    row = conn.execute("SELECT * FROM pending_plans WHERE id=?", (pending_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "pending plan not found")
+    data = await audio.read() if audio else b""
+    if not data and not text:
+        raise HTTPException(400, "audio or text required")
+    heard = pipeline.hear_short(conn, data, audio.content_type if audio else "audio/webm", hint_text=text)
+    said = heard["text"]
+    verdict = json.loads(row["verdict_json"])
+
+    def ask(state):
+        msg = phrases.say(state, min(attempt + 1, 1))
+        return {"action": "repeat", "heard": said, "message": msg, "speak": speakify(msg), "error": heard["error"]}
+
+    if not said.strip():
+        return ask("not_heard")
+    if verdict["level"] != "clarify":
+        yn = dialogue.yes_no(said)
+        if yn is True:
+            return {"action": "confirmed", "heard": said, **_execute_pending(pending_id)}
+        if yn is False:
+            conn.execute("DELETE FROM pending_plans WHERE id=?", (pending_id,))
+            msg = phrases.say("cancelled", min(attempt, 1))
+            return {"action": "cancelled", "heard": said, "message": msg, "speak": speakify(msg)}
+        return ask("yes_or_no")
+    choice = dialogue.pick_option(verdict.get("options") or [], said)
+    if choice:
+        new = pipeline.handle_clarification(conn, pending_id, choice=choice)
+    else:
+        new = pipeline.handle_clarification(conn, pending_id, text=dialogue.merge_answer(row["transcript"], said))
+    return {"action": "plan", "heard": said, "result": new}
 
 
 class Clarify(BaseModel):

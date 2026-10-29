@@ -14,6 +14,8 @@ import subprocess
 from pathlib import Path
 
 from . import config
+from . import audio_guard
+from . import phrases
 from .numbers_mg import to_digits
 
 AUDIO_MIN_TOKENS = 120  # system prompt alone ~60-80 tokens; calibrate on J1 with a real note
@@ -55,45 +57,82 @@ EAR1_LITERAL_SYSTEM = (
 )
 
 
-def _spark_ear1_literal(audio: bytes, mime: str, keywords: list[str], hint_text: str | None = None) -> dict:
-    """Ear 1 fallback: Spark audio, literal prompt (keeps numbers as words)."""
-    if hint_text:
-        return {"text": hint_text, "confidence": None, "source": "ear1-hint"}
+SILENCE_TOKEN = "(silence)"
+_NO_INVENT = (f"Si tu n'entends aucune parole, ou si l'audio est absent ou inaudible, réponds exactement {SILENCE_TOKEN} "
+              "et rien d'autre. N'invente jamais de mots, n'explique rien, ne commente pas.")
+
+
+def _prepare(audio: bytes, source: str):
+    """→ (wav, seconds, None) or (None, None, error_result). Checks length and silence BEFORE any API call."""
     try:
         wav = to_wav(audio)
     except (FileNotFoundError, subprocess.CalledProcessError) as e:
-        return {"text": "", "confidence": None, "source": "ear1-spark", "error": f"to_wav: {type(e).__name__}"}
+        return None, None, {"text": "", "confidence": None, "source": source, "error": f"to_wav: {type(e).__name__}"}
+    info = audio_guard.inspect(wav)
+    if not info["ok"]:
+        return None, info["seconds"], {"text": "", "confidence": None, "source": source, "error": info["reason"],
+                                       "seconds": info["seconds"]}
+    return wav, info["seconds"], None
+
+
+def _spark_listen(model: str, system: str, wav: bytes, source: str, seconds: float, min_tokens: int = 0) -> dict:
+    """Spark with audio, as the docs show it: one user message = a text part + an input_audio part."""
     client = _client(config.BACKEND == "open")
     b64 = base64.b64encode(wav).decode()
+    try:
+        resp = client.chat.completions.create(
+            max_tokens=4000,  # reasoning shares the output budget (docs)
+            model=model,
+            messages=[
+                {"role": "system", "content": system + "\n" + _NO_INVENT},
+                {"role": "user", "content": [
+                    {"type": "text", "text": "Transcris cette note vocale."},
+                    {"type": "input_audio", "input_audio": {"data": b64, "format": "wav"}},
+                ]},
+            ],
+        )
+    except Exception as e:  # API error, rate limit, network: this ear stays silent, the other one can still work
+        return {"text": "", "confidence": None, "source": source, "error": f"{type(e).__name__}: {str(e)[:160]}"}
+    prompt_tokens = getattr(resp.usage, "prompt_tokens", None) if resp.usage else None
+    dropped = prompt_tokens is not None and prompt_tokens < min_tokens
+    text = (resp.choices[0].message.content or "").strip()
+    if dropped:
+        return {"text": "", "confidence": None, "source": source, "dropped": True, "prompt_tokens": prompt_tokens,
+                "error": "tsy tonga tany amin'ny modely ny feo (audio dropped)"}
+    if text.strip("()[] .").lower() == "silence":
+        return {"text": "", "confidence": None, "source": source, "prompt_tokens": prompt_tokens,
+                "error": "tsy nisy teny re"}
+    return audio_guard.clean({"text": text, "confidence": None, "source": source, "prompt_tokens": prompt_tokens,
+                              "seconds": seconds}, seconds)
+
+
+def _spark_ear1_literal(audio: bytes, mime: str, keywords: list[str], hint_text: str | None = None) -> dict:
+    """Ear 1 alternative: Spark audio, literal prompt (keeps numbers as words). Same model as ear 2."""
+    if hint_text:
+        return {"text": hint_text, "confidence": None, "source": "ear1-hint"}
+    wav, seconds, err = _prepare(audio, "ear1-spark-literal")
+    if err:
+        return err
     system = EAR1_LITERAL_SYSTEM
     if keywords:
-        system += "\nVocabulaire possible : " + ", ".join(keywords[:30])
-    resp = client.chat.completions.create(
-        max_tokens=4000,
-        model=config.OPEN_WEIGHTS_MODEL if config.BACKEND == "open" else getattr(config, "MODEL_EAR1", config.MODEL_EAR2),
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": [{"type": "input_audio", "input_audio": {"data": b64, "format": "wav"}}]},
-        ],
-    )
-    text = (resp.choices[0].message.content or "").strip()
-    return {"text": text, "confidence": None, "source": "ear1-spark-literal"}
+        system += "\nMots possibles (ne les écris que si tu les entends) : " + ", ".join(keywords[:30])
+    model = config.OPEN_WEIGHTS_MODEL if config.BACKEND == "open" else getattr(config, "MODEL_EAR1", config.MODEL_EAR2)
+    return _spark_listen(model, system, wav, "ear1-spark-literal", seconds)
 
 
 def _whisper_transcribe(audio: bytes, mime: str, keywords: list[str], hint_text: str | None = None) -> dict:
-    """Ear 1 real: Whisper large-v3 via Fireworks (OpenAI-compatible)."""
+    """Ear 1 alternative: Whisper large-v3 via Fireworks (not a Meta model; comparison only)."""
     if hint_text:
         return {"text": hint_text, "confidence": None, "source": "ear1-hint"}
     key = getattr(config, "FIREWORKS_API_KEY", "")
     if not key:
         return {"text": "", "confidence": None, "source": "ear1-whisper", "error": "FIREWORKS_API_KEY missing"}
+    wav, seconds, err = _prepare(audio, "ear1-whisper")
+    if err:
+        return err
     from openai import OpenAI
-    base = getattr(config, "WHISPER_BASE_URL", "https://audio-prod.us-virginia-1.direct.fireworks.ai/v1")
-    client = OpenAI(base_url=base, api_key=key)
-    try:
-        wav = to_wav(audio)
-    except (FileNotFoundError, subprocess.CalledProcessError) as e:
-        return {"text": "", "confidence": None, "source": "ear1-whisper", "error": f"to_wav: {type(e).__name__}"}
+    client = OpenAI(base_url=getattr(config, "WHISPER_BASE_URL", "https://audio-prod.us-virginia-1.direct.fireworks.ai/v1"),
+                    api_key=key)
     file_obj = io.BytesIO(wav)
     file_obj.name = "audio.wav"
     kwargs = {"model": getattr(config, "WHISPER_MODEL", "whisper-v3"), "file": file_obj}
@@ -101,9 +140,10 @@ def _whisper_transcribe(audio: bytes, mime: str, keywords: list[str], hint_text:
         kwargs["prompt"] = ", ".join(keywords[:30])
     try:
         resp = client.audio.transcriptions.create(**kwargs)
-        return {"text": (getattr(resp, "text", "") or "").strip(), "confidence": None, "source": "ear1-whisper"}
     except Exception as e:
         return {"text": "", "confidence": None, "source": "ear1-whisper", "error": type(e).__name__}
+    return audio_guard.clean({"text": (getattr(resp, "text", "") or "").strip(), "confidence": None,
+                              "source": "ear1-whisper", "seconds": seconds}, seconds)
 
 
 VT_MAX_KEYWORDS = 50  # docs give no limit; keep the list short and most-used first
@@ -126,10 +166,9 @@ def voice_transcribe(audio: bytes, keywords: list[str] | None = None, language_b
     """
     import httpx
 
-    try:
-        wav = to_wav(audio, rate=16000)
-    except (FileNotFoundError, subprocess.CalledProcessError) as e:
-        return {"text": "", "confidence": None, "source": "voice-transcribe", "error": f"to_wav: {type(e).__name__}"}
+    wav, seconds, err = _prepare(audio, "voice-transcribe")
+    if err:
+        return err
     req = {"model": config.MODEL_TRANSCRIBE, "audioEncoding": "WAV", "mode": "PUSH_TO_TALK"}
     if keywords:
         req["keywords"] = list(dict.fromkeys(k for k in keywords if k))[:VT_MAX_KEYWORDS]
@@ -153,8 +192,11 @@ def voice_transcribe(audio: bytes, keywords: list[str] | None = None, language_b
             msg = r.text[:200]
         return {"text": "", "confidence": None, "source": "voice-transcribe", "error": f"HTTP {r.status_code}: {msg}"}
     body = r.json()
-    return {"text": (body.get("transcript") or "").strip(), "confidence": None, "source": "voice-transcribe",
-            "session_id": body.get("sessionId"), "audio_ms": body.get("audioDurationMs")}
+    if body.get("audioDurationMs"):
+        seconds = body["audioDurationMs"] / 1000
+    return audio_guard.clean({"text": (body.get("transcript") or "").strip(), "confidence": None,
+                              "source": "voice-transcribe", "session_id": body.get("sessionId"),
+                              "audio_ms": body.get("audioDurationMs"), "seconds": seconds}, seconds)
 
 
 def transcribe(audio: bytes, mime: str, keywords: list[str], hint_text: str | None = None) -> dict:
@@ -176,28 +218,15 @@ def listen_with_spark(audio: bytes, mime: str, lexicon_prompt: str, hint_text: s
     """Ear 2 — Muse Spark listens to the raw audio with the merchant lexicon as context."""
     if config.BACKEND == "mock" or not audio:
         return {"text": hint_text or "", "confidence": 1.0, "source": "mock"}
-    try:
-        wav = to_wav(audio)
-    except (FileNotFoundError, subprocess.CalledProcessError) as e:
-        return {"text": "", "confidence": None, "source": "spark-audio", "error": f"to_wav: {type(e).__name__}"}
-    client = _client(config.BACKEND == "open")
-    b64 = base64.b64encode(wav).decode()
-    try:
-        resp = client.chat.completions.create(
-            max_tokens=4000,
-            model=config.OPEN_WEIGHTS_MODEL if config.BACKEND == "open" else config.MODEL_EAR2,
-            messages=[
-                {"role": "system", "content": "Transcris mot à mot cette note vocale d'un commerçant malgache "
-                                              "(malgache, français ou mélange). Écris les nombres en chiffres.\n" + lexicon_prompt},
-                {"role": "user", "content": [{"type": "input_audio", "input_audio": {"data": b64, "format": "wav"}}]},
-            ],
-        )
-    except Exception as e:  # API error, rate limit, network: this ear stays silent, the other one can still work
-        return {"text": "", "confidence": None, "source": "spark-audio", "error": f"{type(e).__name__}: {str(e)[:160]}"}
-    prompt_tokens = getattr(resp.usage, "prompt_tokens", None) if resp.usage else None
-    dropped = prompt_tokens is not None and prompt_tokens < AUDIO_MIN_TOKENS + len(lexicon_prompt) // 4
-    text = "" if dropped else (resp.choices[0].message.content or "").strip()
-    return {"text": text, "confidence": None, "source": "spark-audio", "dropped": dropped, "prompt_tokens": prompt_tokens}
+    wav, seconds, err = _prepare(audio, "spark-audio")
+    if err:
+        return err
+    system = ("Transcris mot à mot cette note vocale d'un commerçant malgache (malgache, français ou mélange). "
+              "Écris les nombres en chiffres. Écris uniquement ce qui est dit.\n"
+              + (("Mots du commerçant (ne les écris que si tu les entends) :\n" + lexicon_prompt) if lexicon_prompt else ""))
+    model = config.OPEN_WEIGHTS_MODEL if config.BACKEND == "open" else config.MODEL_EAR2
+    return _spark_listen(model, system, wav, "spark-audio", seconds,
+                         min_tokens=AUDIO_MIN_TOKENS + len(lexicon_prompt) // 4)
 
 
 # ---------------------------------------------------------------- planner
@@ -208,6 +237,8 @@ si une information manque, appelle ask_clarification.
 Si le commerçant POSE UNE QUESTION sur ses données (« iza no manana trosa ? », « firy ny trosan'i Rabe ? »,
 « ohatrinona ny varotra androany ? », « firy ny vary sisa ? »), appelle ask_ledger et rien d'autre :
 la réponse sera calculée depuis la base.
+Unités : donne la quantité et l'unité DITES (« dimanjato grama » → qty 500, unit "g" ; « antsasaky ny kilao » → 0.5 "kg" ;
+« telo kapoaka » → 3 "kapoaka"). Le siramamy et la lafarinina se vendent au poids. Ne convertis rien toi-même.
 {lexicon}
 Produits connus : {products}
 Clients connus : {customers}"""
@@ -229,8 +260,10 @@ def _tool_calls(resp) -> list[dict]:
             continue
     if not calls:
         text = (msg.content or "").strip()
+        # A short question is shown as is; a long or off-topic paragraph is not (no model prose on the card).
+        ok = text and len(text) <= 160 and text.count(".") <= 2 and not audio_guard.is_meta_reply(text)
         calls = [{"tool": "ask_clarification",
-                  "args": {"question": text[:200] or "Tsy azoko tsara. Avereno azafady ?"}}]
+                  "args": {"question": text if ok else phrases.say("not_heard")}}]
     return calls
 
 
@@ -284,7 +317,9 @@ def read_notebook(image: bytes, mime: str, context: dict) -> list[dict]:
 
 
 # ---------------------------------------------------------------- offline mock
-_UNIT = r"(?:kapoaka|litatra|litre|litres|pièces?|pieces?|kg|kilos?)"
+from . import units as _units
+_UNIT = rf"(?:{_units.UNIT_WORDS})"   # kg, kilao, g, grama, kapoaka, litatra, isa, livatra…
+_NUM = r"(\d+(?:\.\d+)?)"          # 3, 500, 0.5, 2.5
 
 # Payment verbs (sale payment OR debt repayment). "avance" = deposit.
 _PAY_VERBS_SALE = r"(?:nandoa|payé|paye|donné|donne|avance)"
@@ -349,17 +384,19 @@ def _find_amount_sale(t: str):
 
 
 def _find_qty(t: str, product: str):
-    """qty of `product` in normalised text; handles both word orders and optional unit."""
+    """(qty, unit) of `product` in normalised text; both word orders, optional unit. unit None = base unit."""
     p = re.escape(product)
-    for pat in (
-        rf"(?<![\d\w])(\d+)\s*{_UNIT}?\s*(?:de\s+|d')?{p}(?!\w)",  # 3 kapoaka vary / 1 litre d'menaka
-        rf"(?<!\w){p}(?!\w)[,\s:]+{_UNIT}\s*(\d+)",                  # vary, kapoaka 3
-        rf"(?<!\w){p}(?!\w)[,\s:]*(\d+)",                            # vary 3 / mofo : 20
-    ):
+    pats = (
+        (rf"(?<![\d\w.]){_NUM}\s*({_UNIT})?\s*(?:de\s+|d')?{p}(?!\w)", 1, 2),    # 3 kapoaka vary · 500 g siramamy
+        (rf"(?<!\w){p}(?!\w)[,\s:]+({_UNIT})\s*{_NUM}(?!\w)", 2, 1),             # vary, kapoaka 3
+        (rf"(?<!\w){p}(?!\w)[,\s:]*{_NUM}(?:\s*({_UNIT})(?!\w))?", 1, 2),        # siramamy 500 g · mofo 8
+    )
+    for pat, qg, ug in pats:
         m = re.search(pat, t)
         if m:
-            return int(m.group(1))
-    return None
+            q = float(m.group(qg))
+            return (int(q) if q.is_integer() else q), m.group(ug)
+    return None, None
 
 
 def mock_plan(text: str, ctx: dict) -> list[dict]:
@@ -377,19 +414,21 @@ def mock_plan(text: str, ctx: dict) -> list[dict]:
 
     items = []
     for p in ctx["product_list"]:
-        q = _find_qty(t, p.lower())
+        q, unit = _find_qty(t, p.lower())
         if q and q > 0:
-            items.append({"product": p, "qty": q})
+            items.append({"product": p, "qty": q, **({"unit": _units.normalize(unit)} if unit else {})})
 
     # 1. Loss (damaged, lost, removed from stock)
     if _LOSS_RE.search(t) and items:
         return [{"tool": "update_stock",
-                 "args": {"product": items[0]["product"], "delta": -items[0]["qty"], "reason": "loss"}}]
+                 "args": {"product": items[0]["product"], "delta": -items[0]["qty"], "reason": "loss",
+                          "unit": items[0].get("unit")}}]
 
     # 2. Restock (received, delivered)
     if _RESTOCK_RE.search(t) and items:
         return [{"tool": "update_stock",
-                 "args": {"product": items[0]["product"], "delta": items[0]["qty"], "reason": "restock"}}]
+                 "args": {"product": items[0]["product"], "delta": items[0]["qty"], "reason": "restock",
+                          "unit": items[0].get("unit")}}]
 
     # 3. Debt repayment (customer + amount, no product line)
     if not items and customer and _PAY_RE.search(t):
@@ -420,4 +459,4 @@ def mock_plan(text: str, ctx: dict) -> list[dict]:
 
     # 7. Ask
     return [{"tool": "ask_clarification",
-             "args": {"question": "Inona no entana nolafosina ? (Quel produit ?)"}}]
+             "args": {"question": phrases.say("clarify_product")}}]

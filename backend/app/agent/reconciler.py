@@ -8,6 +8,7 @@ Disagreement → a targeted clarification question with the two readings as choi
 import re
 
 from ..numbers_mg import numbers_in
+from .. import phrases
 
 
 def _names(text: str, vocab: list[str]) -> set[str]:
@@ -24,7 +25,7 @@ def reconcile(ear1: str, ear2: str, vocab: list[str]) -> dict:
     ear1, ear2 = (ear1 or "").strip(), (ear2 or "").strip()
     if not ear1 and not ear2:
         return {"text": "", "agree": False, "conflicts": [{"kind": "empty"}],
-                "question": "Tsy re tsara. Avereno azafady ?", "options": []}
+                "question": phrases.say("not_heard"), "options": []}
     if not ear1 or not ear2:  # one ear not wired, failed or switched off: single ear
         return {"text": ear1 or ear2, "agree": True, "conflicts": [], "question": None, "options": []}
     if ear1.lower() == ear2.lower():
@@ -46,5 +47,5 @@ def reconcile(ear1: str, ear2: str, vocab: list[str]) -> dict:
     c = conflicts[0]
     a = ", ".join(map(str, c["ear1"])) or "?"
     b = ", ".join(map(str, c["ear2"])) or "?"
-    q = f"Firy marina : {a} sa {b} ?" if c["kind"] == "number" else f"Iza/inona marina : {a} sa {b} ?"
+    q = phrases.say("clarify_amount" if c["kind"] == "number" else "clarify_name", a=a, b=b)
     return {"text": ear1, "agree": False, "conflicts": conflicts, "question": q, "options": _options(ear1, ear2)}

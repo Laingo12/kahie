@@ -62,7 +62,7 @@ def test_words_and_digits_agree_after_normalisation():
 
 def test_question_names_only_the_disputed_numbers():
     rec = reconciler.reconcile("Rabe 3 vary 2000 Ar", "Rabe 3 vary 3000 Ar", ["vary", "Rabe"])
-    assert not rec["agree"] and rec["question"] == "Firy marina : 2000 sa 3000 ?"
+    assert not rec["agree"] and rec["question"] == "Firy marina: 2000 sa 3000?"
     assert [o["id"] for o in rec["options"]] == ["ear1", "ear2"]
 
 

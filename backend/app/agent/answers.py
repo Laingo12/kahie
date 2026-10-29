@@ -6,6 +6,7 @@ cannot invent a debt. Nothing is written.
 """
 from datetime import date, timedelta
 
+from .. import units
 from ..numbers_mg import speakify
 
 TOPICS = ("debts", "customer_balance", "aged_debts", "sales", "stock", "low_stock")
@@ -68,7 +69,7 @@ def answer_one(conn, args: dict) -> dict:
         if owed > 0:
             text = f"{ar(owed)} ny trosan'i {c['name']}."
         elif owed < 0:
-            text = f"Tsy manana trosa i {c['name']}; mbola manana {ar(-owed)} mialoha izy."
+            text = f"Tsy manana trosa i {c['name']}. Efa nandoa mialoha {ar(-owed)} aza izy."
         else:
             text = f"Tsy manana trosa i {c['name']}."
         return {"topic": topic, "rows": [{"label": c["name"], "value": ar(max(owed, 0))}], "text": text}
@@ -98,27 +99,27 @@ def answer_one(conn, args: dict) -> dict:
         if not s["n"]:
             return {"topic": topic, "rows": [], "text": f"Mbola tsy nisy varotra {label}."}
         best = ", ".join(f"{r['name']} {ar(r['t'])}" for r in top)
-        return {"topic": topic, "rows": [{"label": r["name"], "value": f"{_qty(r['q'])} {r['unit']} · {ar(r['t'])}"} for r in top],
-                "text": f"Varotra {label}: {ar(s['t'])} ({s['n']} andalana). Ny be indrindra: {best}."}
+        return {"topic": topic, "rows": [{"label": r["name"], "value": f"{units.fmt_qty(r['q'], r['unit'])} · {ar(r['t'])}"} for r in top],
+                "text": f"Varotra {label}: {ar(s['t'])}, varotra {s['n']}. Ny nahazoana vola be indrindra: {best}."}
 
     if topic == "stock":
         p = _product(conn, args.get("product"))
         if not p:
             return {"topic": topic, "rows": [], "text": f"Tsy fantatro ny entana « {args.get('product') or '?'} »."}
         warn = " Efa ho lany!" if p["stock"] < LOW_STOCK else ""
-        return {"topic": topic, "rows": [{"label": p["name"], "value": f"{_qty(p['stock'])} {p['unit']}"}],
-                "text": f"{p['name'].capitalize()}: {_qty(p['stock'])} {p['unit']} sisa.{warn}"}
+        return {"topic": topic, "rows": [{"label": p["name"], "value": units.fmt_qty(p["stock"], p["unit"])}],
+                "text": f"{units.fmt_qty(p['stock'], p['unit'])} {p['name']} sisa.{warn}"}
 
     if topic == "low_stock":
         rows = [dict(r) for r in conn.execute("SELECT name, unit, stock FROM products WHERE stock < ? ORDER BY stock", (LOW_STOCK,))]
         if not rows:
             return {"topic": topic, "rows": [], "text": "Tsara daholo ny tahiry, tsy misy efa ho lany."}
-        names = ", ".join(f"{r['name']} {_qty(r['stock'])} {r['unit']}" for r in rows)
-        return {"topic": topic, "rows": [{"label": r["name"], "value": f"{_qty(r['stock'])} {r['unit']}"} for r in rows],
+        names = ", ".join(f"{r['name']} {units.fmt_qty(r['stock'], r['unit'])}" for r in rows)
+        return {"topic": topic, "rows": [{"label": r["name"], "value": units.fmt_qty(r["stock"], r["unit"])} for r in rows],
                 "text": f"Efa ho lany: {names}."}
 
     return {"topic": "unknown", "rows": [],
-            "text": "Tsy azoko tsara ny fanontaniana. Azonao anontaniana hoe: iza no manana trosa, ohatrinona ny varotra, firy ny tahiry."}
+            "text": "Tsy azoko tsara ny fanontanianao. Azonao atao ny manontany hoe: iza no manana trosa, ohatrinona ny varotra, firy ny entana sisa."}
 
 
 def answer(conn, calls: list[dict]) -> dict:

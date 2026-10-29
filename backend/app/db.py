@@ -46,11 +46,14 @@ def seed_demo(conn: sqlite3.Connection) -> None:
     conn.executemany(
         "INSERT INTO products(name, unit, unit_price, stock) VALUES (?,?,?,?)",
         [
+            # Price and stock are in each product's base unit (see units.py):
+            # siramamy and lafarinina are sold by weight (kg); 1 kapoaka of sugar ≈ 250 g → 800 Ar.
             ("vary", "kapoaka", 1000, 120),
-            ("siramamy", "kapoaka", 800, 60),
+            ("siramamy", "kg", 3200, 15),
+            ("lafarinina", "kg", 3000, 25),
             ("menaka", "litatra", 9000, 15),
-            ("savony", "pièce", 1500, 40),
-            ("mofo", "pièce", 300, 50),
+            ("savony", "isa", 1500, 40),
+            ("mofo", "isa", 300, 50),
         ],
     )
     conn.executemany(
@@ -68,6 +71,7 @@ def seed_demo(conn: sqlite3.Connection) -> None:
             ("savon", "savony", "product"), ("savons", "savony", "product"),
             ("pain", "mofo", "product"), ("pains", "mofo", "product"),
             ("litre", "litatra", "unit"), ("litres", "litatra", "unit"),
+            ("farine", "lafarinina", "product"), ("lafarine", "lafarinina", "product"),
         ],
     )
     conn.commit()
