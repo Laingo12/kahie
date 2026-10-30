@@ -92,6 +92,22 @@ def to_wav(path: Path) -> bytes:
     return out.stdout
 
 
+def level(wav: bytes) -> str:
+    """Duration and loudness of the recording: is there really a voice in it?"""
+    import io, wave
+    from array import array
+    with wave.open(io.BytesIO(wav)) as w:
+        frames, rate = w.readframes(w.getnframes()), w.getframerate()
+    a = array("h"); a.frombytes(frames[: len(frames) // 2 * 2])
+    if not a:
+        return "empty"
+    rms = int((sum(x * x for x in a) / len(a)) ** 0.5)
+    peak = max(abs(x) for x in a)
+    loud = sum(1 for i in range(0, len(a), 1600) if max(abs(x) for x in a[i:i + 1600]) > 3000) / 10
+    hint = "very quiet — the voice may be too far or muted" if peak < 3000 else "ok"
+    return f"{len(a) / rate:.1f} s · rms {rms} · peak {peak}/32767 · {loud:.1f} s above speech level ({hint})"
+
+
 @step("5. Voice Transcribe (batch, auto-detect)")
 def check_vt(wav: bytes):
     import httpx
@@ -102,7 +118,8 @@ def check_vt(wav: bytes):
     if r.status_code != 200:
         raise RuntimeError(f"HTTP {r.status_code}: {r.text[:300]}")
     b = r.json()
-    return f"“{b.get('transcript')}” · {b.get('audioDurationMs')} ms of audio"
+    raw = json.dumps(b, ensure_ascii=False)[:600]
+    return f"“{b.get('transcript')}” · {b.get('audioDurationMs')} ms of audio\n      raw: {raw}"
 
 
 @step("6. Spark audio (ear 2)")
@@ -123,7 +140,7 @@ if __name__ == "__main__":
             p = Path(sys.argv[1])
             try:
                 wav = to_wav(p)
-                print(f"      audio: {p.name} → {len(wav) // 1024} KB WAV")
+                print(f"      audio: {p.name} → {len(wav) // 1024} KB WAV · {level(wav)}")
                 check_vt(wav)
                 check_spark_audio(wav)
             except FileNotFoundError:

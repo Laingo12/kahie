@@ -9,6 +9,7 @@ Ear 1 modes (config.EAR1_MODE, default "voice_transcribe"):
 import base64
 import io
 import json
+import logging
 import re
 import subprocess
 from pathlib import Path
@@ -194,7 +195,14 @@ def voice_transcribe(audio: bytes, keywords: list[str] | None = None, language_b
     body = r.json()
     if body.get("audioDurationMs"):
         seconds = body["audioDurationMs"] / 1000
-    return audio_guard.clean({"text": (body.get("transcript") or "").strip(), "confidence": None,
+    text = (body.get("transcript") or "").strip()
+    if not text:   # some responses carry the words only in the turns
+        text = " ".join((t.get("transcript") or t.get("text") or "").strip()
+                        for t in body.get("turns") or [] if isinstance(t, dict)).strip()
+    if not text:
+        logging.getLogger("uvicorn.error").info("[kahie] voice-transcribe empty, raw: %s",
+                                                json.dumps(body, ensure_ascii=False)[:400])
+    return audio_guard.clean({"text": text, "confidence": None,
                               "source": "voice-transcribe", "session_id": body.get("sessionId"),
                               "audio_ms": body.get("audioDurationMs"), "seconds": seconds}, seconds)
 

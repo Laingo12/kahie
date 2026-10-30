@@ -1,6 +1,6 @@
 // Cache the app shell so Kahie opens without network. API calls are never cached.
 // Bump this on every deploy, or phones keep the old app.js (cache-first).
-const CACHE = "kahie-v14";
+const CACHE = "kahie-v18";
 const SHELL = [
   "./",
   "index.html",
@@ -8,6 +8,8 @@ const SHELL = [
   "app.js",
   "manifest.json",
   "icons/icon.svg",
+  "icons/icon-192.png",
+  "icons/icon-512.png",
   "img/paper.jpg",
   "img/logo-k.png",
 ];
@@ -38,8 +40,17 @@ self.addEventListener("fetch", (e) => {
   e.respondWith(
     fetch(e.request)
       .then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
+        // Cache only real app files: a tunnel's error or warning page (502, ngrok/cloudflare HTML in place of
+        // app.js…) must never replace the shell, or the installed app opens blank.
+        const html = (res.headers.get("content-type") || "").includes("text/html");
+        const isPage = e.request.mode === "navigate";
+        if (!res.ok || res.status >= 300) {
+          return isPage ? caches.match("index.html").then((r) => r || res) : caches.match(e.request).then((r) => r || res);
+        }
+        if (isPage === html) {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
+        }
         return res;
       })
       .catch(() => caches.match(e.request).then((r) => r || caches.match("index.html")))

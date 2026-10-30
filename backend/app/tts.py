@@ -11,6 +11,7 @@ Gemini TTS returns raw PCM (16-bit, mono, 24 kHz); we wrap it in a WAV header so
 """
 import base64
 import io
+import re
 import wave
 from collections import OrderedDict
 
@@ -26,7 +27,22 @@ _cache: "OrderedDict[str, bytes]" = OrderedDict()
 
 # How Gemini should read: Malagasy as spoken in Antananarivo, calm, numbers clear (they are already words).
 STYLE = ("Read aloud in Malagasy, as spoken in Antananarivo, Madagascar. Warm, clear and calm, like a "
-         "shopkeeper's helper; pronounce every number slowly and distinctly. Say only the sentence: ")
+         "shopkeeper's helper; pronounce every number slowly and distinctly. In Malagasy 'o' sounds like 'u', "
+         "'tch' and 'dj' are single sounds as in English 'church' and 'judge'. Say only the sentence: ")
+
+
+def pronounce_mg(text: str) -> str:
+    """Respell the two Malagasy clusters TTS voices get wrong: tr → tch (trosa → tchosa), dr → dj (Andry → Andjy).
+    Only the audio uses this; the screen keeps the real spelling."""
+    def fix(m):
+        w = m.group(0)
+        out = re.sub("tr", "tch", w)
+        out = re.sub("Tr", "Tch", out)
+        out = re.sub("TR", "TCH", out)
+        out = re.sub("dr", "dj", out)
+        out = re.sub("Dr", "Dj", out)
+        return re.sub("DR", "DJ", out)
+    return re.sub(r"[A-Za-zÀ-ÿ']+", fix, text)
 
 
 class SpeakRequest(BaseModel):
@@ -66,7 +82,7 @@ def _synthesize(text: str) -> bytes:
     client = genai.Client(api_key=config.GEMINI_API_KEY)
     resp = client.models.generate_content(
         model=config.GEMINI_TTS_MODEL,
-        contents=STYLE + text,
+        contents=STYLE + pronounce_mg(text),
         config=types.GenerateContentConfig(
             response_modalities=["AUDIO"],
             speech_config=types.SpeechConfig(

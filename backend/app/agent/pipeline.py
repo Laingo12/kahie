@@ -9,8 +9,10 @@ Every step returns a `trace` entry: which model was used, its latency, the sourc
 The UI shows this trace so the agent is *verifiable*, not a black box.
 """
 import json
+import logging
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 
 from .. import config, lexicon, models_client, units
 from .. import phrases
@@ -37,6 +39,26 @@ def normalize_ear(conn, text: str) -> str:
     then learned mishearings → canonical words (if the lexicon is on)."""
     text = units.normalize_text(text or "")
     return lexicon.normalize(conn, text) if config.LEXICON_ON else text
+
+
+log = logging.getLogger("uvicorn.error")   # shows in the uvicorn terminal
+
+
+def _keep_audio(audio: bytes, mime: str, kind: str) -> str | None:
+    """KAHIE_DEBUG_AUDIO=on: save the recording as received, to replay it or test it with eval/api_smoke.py."""
+    if not config.DEBUG_AUDIO or not audio:
+        return None
+    folder = config.ROOT / "data" / "debug"
+    folder.mkdir(parents=True, exist_ok=True)
+    ext = next((e for e in ("webm", "mp4", "ogg", "wav", "mpeg") if e in (mime or "")), "bin")
+    path = folder / f"{time.strftime('%Y%m%d-%H%M%S')}-{kind}.{ext}"
+    path.write_bytes(audio)
+    return str(path)
+
+
+def _log_ear(step: str, result: dict, audio: bytes, ms: int) -> None:
+    log.info("[kahie] %s %-16s %5d ms  %6d bytes  %r%s", step, result.get("source"), ms, len(audio or b""),
+             (result.get("text") or "")[:120], f"  ✗ {result['error']}" if result.get("error") else "")
 
 
 def _ear_trace(step: str, result: dict, ms: int) -> dict:
@@ -71,15 +93,29 @@ def handle_voice(conn, audio: bytes, mime: str, hint_text: str | None = None) ->
     if not config.LEXICON_ON:
         ctx["lexicon"] = ""
 
-    # Ear 1
-    t = time.perf_counter()
-    ear1 = models_client.transcribe(audio, mime, kw, hint_text)
-    trace.append(_ear_trace("ear1", ear1, round((time.perf_counter() - t) * 1000)))
+    saved = _keep_audio(audio, mime, "note")
+    if saved:
+        log.info("[kahie] note audio saved: %s (%s)", saved, mime)
 
-    # Ear 2
-    t = time.perf_counter()
-    ear2 = models_client.listen_with_spark(audio, mime, ctx["lexicon"], hint_text) if config.EAR2_ON else {"text": "", "source": "off"}
-    trace.append(_ear_trace("ear2", ear2, round((time.perf_counter() - t) * 1000)))
+    # The two ears listen AT THE SAME TIME (independent API calls): latency = the slower ear, not the sum.
+    def ear_one():
+        t = time.perf_counter()
+        r = models_client.transcribe(audio, mime, kw, hint_text)
+        return r, round((time.perf_counter() - t) * 1000)
+
+    def ear_two():
+        t = time.perf_counter()
+        r = (models_client.listen_with_spark(audio, mime, ctx["lexicon"], hint_text) if config.EAR2_ON
+             else {"text": "", "source": "off"})
+        return r, round((time.perf_counter() - t) * 1000)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        f1, f2 = pool.submit(ear_one), pool.submit(ear_two)
+        (ear1, ms1), (ear2, ms2) = f1.result(), f2.result()
+    trace.append(_ear_trace("ear1", ear1, ms1))
+    trace.append(_ear_trace("ear2", ear2, ms2))
+    _log_ear("ear1", ear1, audio, ms1)
+    _log_ear("ear2", ear2, audio, ms2)
 
     raw = {"ear1": ear1["text"], "ear2": ear2["text"]}
     n1, n2 = normalize_ear(conn, raw["ear1"]), normalize_ear(conn, raw["ear2"])
@@ -302,8 +338,15 @@ def hear_short(conn, audio: bytes, mime: str, hint_text: str | None = None) -> d
     """A short spoken answer ("eny", "roa arivo", "Rabe"): one ear is enough.
     Voice Transcribe first (fast, dedicated ASR), Spark audio if it heard nothing. Guards apply as for notes."""
     kw = lexicon.keywords(conn) if config.LEXICON_ON else []
+    saved = _keep_audio(audio, mime, "reply")
+    if saved:
+        log.info("[kahie] reply audio saved: %s (%s)", saved, mime)
+    t = time.perf_counter()
     out = models_client.transcribe(audio, mime, kw, hint_text)
+    _log_ear("reply-ear1", out, audio, round((time.perf_counter() - t) * 1000))
     if not (out.get("text") or "").strip() and audio and config.BACKEND != "mock":
+        t = time.perf_counter()
         out = models_client.listen_with_spark(audio, mime, lexicon.as_prompt(conn) if config.LEXICON_ON else "", hint_text)
+        _log_ear("reply-ear2", out, audio, round((time.perf_counter() - t) * 1000))
     return {"text": normalize_ear(conn, out.get("text") or ""), "raw": out.get("text") or "",
             "source": out.get("source"), "error": out.get("error")}

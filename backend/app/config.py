@@ -35,6 +35,10 @@ LEXICON_ON = os.getenv("KAHIE_LEXICON", "on") == "on"
 DB_PATH =Path(os.getenv("KAHIE_DB", ROOT / "data" / "kahie.db"))
 
 # Verifier thresholds
+# Debug: keep every received recording in data/debug/ (never committed) to replay it or run
+# eval/api_smoke.py on it. Off by default — recordings are personal data.
+DEBUG_AUDIO = os.getenv("KAHIE_DEBUG_AUDIO", "off") == "on"
+
 PRICE_DEVIATION = float(os.getenv("PRICE_DEVIATION", "0.5"))   # ±50 % from usual price → reinforced confirmation
 
 # Ear 1 mode: "voice_transcribe" (default) | "spark_literal" | "whisper" | "off"

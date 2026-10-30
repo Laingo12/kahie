@@ -185,6 +185,14 @@ uvicorn app.main:app --app-dir backend --reload
 # open http://127.0.0.1:8000/
 ```
 
+**On a phone:** browsers open the microphone only on HTTPS (or `localhost`), so `http://192.168.x.x:8000` will not work. For a quick test, a free Cloudflare tunnel gives an HTTPS address:
+
+```bash
+cloudflared tunnel --url http://localhost:8000     # prints https://<random>.trycloudflare.com — open it on the phone
+```
+
+For the live demo, deploy with HTTPS (`deploy/`, nginx + certbot).
+
 Tests (no network needed):
 
 ```bash

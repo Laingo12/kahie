@@ -1,5 +1,13 @@
 // Kahie PWA — record, confirm, dashboard, statement. Offline queue for voice notes.
 const $ = (s) => document.querySelector(s);
+
+// Through an ngrok tunnel, requests without this header get ngrok's HTML warning page instead of the API.
+const _fetch = window.fetch.bind(window);
+window.fetch = (url, opts = {}) => {
+  const headers = new Headers(opts.headers || {});
+  headers.set("ngrok-skip-browser-warning", "1");
+  return _fetch(url, { ...opts, headers });
+};
 const fmt = (n) => new Intl.NumberFormat("fr-FR").format(Math.round(n)) + " Ar";
 let current = null; // pending plan shown on the confirmation card
 
@@ -52,6 +60,8 @@ function to_phonetic_mg(text) {
       .replace(/o(?!u)/g, "ou")
       .replace(/y$/g, "i")
       .replace(/j/g, "dz")
+      .replace(/tr/g, "tch")          // Malagasy tr ≈ « tch » (trosa → tchoussa)
+      .replace(/dr/g, "dj")           // Malagasy dr ≈ « dj » (Andry → Andji)
       .replace(/([aeiou])s(?=[aeiouy])/g, "$1ss")
       .replace(/([aeio])n(?=[bcdfghjklmpqrstvwxz])/g, "$1nn")
       .replace(/g(?=[ei])/g, "gu")
@@ -67,7 +77,8 @@ function to_phonetic_mg(text) {
 // any failure falls back to the phone's voice.
 let serverVoice = false, playing = null, lastSpoken = "";
 let speechDone = Promise.resolve(), endSpeech = () => {};
-fetch("api/health").then((r) => r.json()).then((h) => { serverVoice = h.tts === "server"; }).catch(() => {});
+let health = {};
+fetch("api/health").then((r) => r.json()).then((h) => { health = h; serverVoice = h.tts === "server"; }).catch(() => {});
 
 function stopSpeaking() {
   if (playing) { try { playing.pause(); } catch {} playing = null; }
@@ -189,12 +200,53 @@ function setState(text) {
   $("#listen-text").textContent = text;
   $("#listen-bar").hidden = !(handsFree && current);
   $("#mic").classList.toggle("rec", handsFree);
+  $("#hf-stop").hidden = !handsFree;
+  $("#level").hidden = !handsFree;
+}
+
+// Live microphone level under the mic: the shopkeeper SEES that Kahie hears them.
+function showLevel(rms, thr, voice) {
+  const bar = $("#level-bar");
+  bar.style.width = Math.min(100, Math.round((rms / Math.max(thr, 0.001)) * 50)) + "%";
+  bar.classList.toggle("on", voice);
+}
+
+// "Mandinika… 7s": the Meta models can take several seconds; show that Kahie is working.
+let busyTimer = null;
+function busy(on) {
+  clearInterval(busyTimer);
+  if (!on) return;
+  const t0 = Date.now();
+  setState("Mandinika…");
+  busyTimer = setInterval(() => setState(`Mandinika… ${Math.round((Date.now() - t0) / 1000)}s`), 1000);
+}
+
+// Why the microphone is refused — said plainly, with what to do.
+function micProblem(e) {
+  let msg;
+  if (!window.isSecureContext || !navigator.mediaDevices) {
+    msg = "Mila adiresy HTTPS ny mikrô amin'ny finday (tsy mety ny http://192.168…). Sokafy amin'ny rohy https:// i Kahie.";
+  } else if (e && e.name === "NotAllowedError") {
+    msg = "Tsy navela hampiasa ny mikrô i Kahie. Tsindrio ny 🔒 eo akaikin'ny adiresy → Mikrô → Avela, dia avereno.";
+  } else if (e && e.name === "NotFoundError") {
+    msg = "Tsy misy mikrô hita amin'ity fitaovana ity.";
+  } else if (e && e.name === "NotReadableError") {
+    msg = "Misy app hafa mampiasa ny mikrô (antso, WhatsApp…). Akatony ary avereno.";
+  } else {
+    msg = "Tsy azo ampiasaina ny mikrô" + (e && e.name ? ` (${e.name})` : "") + ".";
+  }
+  setState("Tsy azo ampiasaina ny mikrô");
+  toast(msg);
 }
 
 async function openMic() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    const err = new Error("insecure context"); err.name = "InsecureContext"; throw err;
+  }
   if (micStream) return;
   micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === "suspended") { try { await audioCtx.resume(); } catch {} }
   analyser = audioCtx.createAnalyser(); analyser.fftSize = 2048;
   audioCtx.createMediaStreamSource(micStream).connect(analyser);
 }
@@ -206,13 +258,17 @@ function closeMic() {
 
 async function startConversation() {
   if (handsFree) return;
-  try { await openMic(); } catch { setState("Tsy azo ampiasaina ny mikrô"); return; }
+  try { await openMic(); } catch (e) { micProblem(e); return; }
   handsFree = true;
   try { localStorage.setItem("kahie-handsfree", "on"); } catch {}
   $("#wake").hidden = true;
   setState("Henoiko… mitenena");
   speak("Manao ahoana! Henoiko ianao.");
   conversation();
+  toast(health.backend === "api" && health.ffmpeg === false
+    ? "⚠ Tsy misy ffmpeg ao amin'ny serveur: tsy ho re ny feo. Apetraho ny ffmpeg (jereo README)."
+    : health.backend === "mock" ? "⚠ Mode mock (tsy misy API key): tsy henon'i Kahie ny feo. Soraty ny fanamarihana."
+    : "Mitenena fotsiny. Tsindrio ny mikrô raha vita ny teninao, na lazao hoe « ajanony ».");
 }
 
 function stopConversation(remember = true) {
@@ -220,10 +276,18 @@ function stopConversation(remember = true) {
   if (listening) listening.cancel();
   closeMic();
   if (remember) { try { localStorage.setItem("kahie-handsfree", "off"); } catch {} }
+  busy(false);
   setState("Vonona — tsindrio ny mikrô");
 }
 
-$("#mic").onclick = () => (handsFree ? stopConversation() : startConversation());
+// Mic tap: off → start the conversation. On → "I have finished speaking" (send now), or, while
+// Kahie talks, interrupt it and listen. Stopping is the ⏹ button or saying « ajanony ».
+$("#mic").onclick = () => {
+  if (!handsFree) return startConversation();
+  if (playing || ("speechSynthesis" in window && speechSynthesis.speaking)) return stopSpeaking();
+  if (listening) listening.send();
+};
+$("#hf-stop").onclick = () => stopConversation();
 
 async function conversation() {
   while (handsFree) {
@@ -231,12 +295,17 @@ async function conversation() {
     if (!handsFree) break;
     setState(pendingUndo ? "Eny sa tsia?" : current ? (current.verdict.level === "clarify" ? "Henoiko ny valinao…" : "Henoiko… (eny / tsia)") : "Henoiko… mitenena");
     let blob = null;
-    try { blob = await listenOnce({ waitMs: Infinity, rotateMs: 3000, maxMs: 20000 }); }
-    catch { stopConversation(false); setState("Tsy azo ampiasaina ny mikrô"); break; }
+    try { blob = await listenOnce({ waitMs: Infinity, rotateMs: 6000, maxMs: 20000, onLevel: showLevel }); }
+    catch (e) { console.error("[kahie] mic", e); stopConversation(false); micProblem(e); break; }
     if (!blob || !handsFree) continue;
-    setState("Mandinika…");
+    busy(true);
     try { await route(blob); }
-    catch { toast("Nisy olana, andramo indray"); }
+    catch (e) {
+      console.error("[kahie]", e);
+      toast("Nisy olana: " + String(e.message || e).slice(0, 120));
+      speak("Miala tsiny, nisy olana. Avereno azafady.");
+    }
+    finally { busy(false); }
   }
 }
 
@@ -281,8 +350,9 @@ function runCommand(res) {
 try {
   if (localStorage.getItem("kahie-handsfree") === "on" && navigator.mediaDevices) {
     $("#wake").hidden = false;
-    const wake = () => { removeEventListener("pointerdown", wake, true); startConversation(); };
-    addEventListener("pointerdown", wake, true);
+    // Capture phase + stopPropagation: the same tap must not ALSO hit the mic button (start then stop).
+    const wake = (e) => { e.stopPropagation(); e.preventDefault(); removeEventListener("click", wake, true); startConversation(); };
+    addEventListener("click", wake, true);
   }
 } catch {}
 
@@ -292,7 +362,7 @@ async function sendVoice(blob, text) {
   if (blob) fd.append("audio", blob, "note.webm");
   if (text) fd.append("text", text);
   const r = await fetch("api/voice", { method: "POST", body: fd });
-  if (!r.ok) { setState("Nisy olana, andramo indray"); throw new Error(await r.text()); }
+  if (!r.ok) { setState("Nisy olana, andramo indray"); throw new Error(`api/voice ${r.status}: ${(await r.text()).slice(0, 100)}`); }
   const res = await r.json();
   if (res.kind === "command") runCommand(res);
   else if (res.kind === "answer") showAnswer(res);
@@ -430,11 +500,11 @@ let lastWasVoice = false, replyAttempt = 0, listening = null;
 // stops 1.2 s after the speaker goes quiet (or at maxMs). While nobody speaks, the recorder is
 // restarted every `rotateMs` so long silences are never sent. Returns null if nobody spoke
 // (nothing is sent, nothing is guessed).
-async function listenOnce({ maxMs = 8000, silenceMs = 1200, waitMs = 5000, rotateMs = 0 } = {}) {
+async function listenOnce({ maxMs = 8000, silenceMs = 1200, waitMs = 5000, rotateMs = 0, onLevel = null } = {}) {
   await openMic();
   const buf = new Float32Array(analyser.fftSize);
   return new Promise((resolve) => {
-    let rec = null, parts = [], spoke = false, voiced = 0, quietSince = null, floor = 0.01;
+    let rec = null, parts = [], spoke = false, voiced = 0, quietSince = null, floor = 0.004;
     const t0 = performance.now(); let segStart = t0, speechStart = null;
     const startRec = () => {
       parts = [];
@@ -442,12 +512,13 @@ async function listenOnce({ maxMs = 8000, silenceMs = 1200, waitMs = 5000, rotat
       rec.ondataavailable = (e) => { if (e.data.size) parts.push(e.data); };
       rec.start(); segStart = performance.now();
     };
-    const finish = (keep) => {
+    // force = the shopkeeper tapped "finished": send what was recorded even if the level detector missed it.
+    const finish = (keep, force = false) => {
       clearInterval(timer); listening = null;
-      const r = rec, mine = parts;
+      const r = rec, mine = parts, long = performance.now() - segStart > 400;
       r.onstop = () => {
         if (!handsFree) closeMic();
-        resolve(keep && spoke ? new Blob(mine, { type: r.mimeType }) : null);
+        resolve(keep && (spoke || (force && long)) ? new Blob(mine, { type: r.mimeType }) : null);
       };
       if (r.state !== "inactive") r.stop(); else r.onstop();
     };
@@ -455,10 +526,11 @@ async function listenOnce({ maxMs = 8000, silenceMs = 1200, waitMs = 5000, rotat
     const timer = setInterval(() => {
       analyser.getFloatTimeDomainData(buf);
       const rms = Math.sqrt(buf.reduce((s, x) => s + x * x, 0) / buf.length);
-      const thr = Math.max(0.015, floor * 3);
+      const thr = Math.max(0.006, floor * 3);
       const now = performance.now();
+      if (onLevel) onLevel(rms, thr, rms > thr);
       if (!spoke) {
-        if (rms > thr) { voiced += 1; speechStart = speechStart || now; if (voiced >= 3) spoke = true; }
+        if (rms > thr) { voiced += 1; speechStart = speechStart || now; if (voiced >= 3) { spoke = true; if (handsFree) setState("Mandre aho… (tsindrio ny mikrô raha vita)"); } }
         else { voiced = 0; speechStart = null; floor = 0.9 * floor + 0.1 * rms; }
         if (now - t0 > waitMs) return finish(false);
         // Nothing said yet: drop the silent recording and start a fresh one.
@@ -474,7 +546,7 @@ async function listenOnce({ maxMs = 8000, silenceMs = 1200, waitMs = 5000, rotat
       }
     }, 100);
     // stop = "I finished talking" (send what was said); cancel = a button was tapped instead.
-    listening = { stop: () => finish(true), cancel: () => finish(false) };
+    listening = { stop: () => finish(true), send: () => finish(true, true), cancel: () => finish(false) };
   });
 }
 
@@ -509,7 +581,7 @@ function handleReply(res) {
     current = null; show("record"); toast(res.message); speak(res.speak);
   } else if (res.action === "repeat") {
     replyAttempt += 1;
-    toast(res.message);
+    toast(res.message + (res.error ? ` (${res.error})` : ""));      // why it was not heard (silence, too short…)
     // Ask again (twice at most); after that Kahie waits quietly — the buttons are there.
     if (replyAttempt <= 2) speak(res.speak, !handsFree && replyAttempt <= 1 ? () => listenReply() : null);
   } else if (res.action === "plan") {

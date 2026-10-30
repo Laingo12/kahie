@@ -8,7 +8,7 @@
   <title>Kahie — cahier vocal</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="icons/icon.svg">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="stylesheet" href="styles.css">
   <meta property="og:title" content="Kahie — the voice ledger that speaks Malagasy">
   <meta property="og:description" content="A shopkeeper speaks Malagasy; Kahie writes a verified ledger. Meta Global AI Developer Hackathon 2026.">
@@ -31,7 +31,9 @@
       <button id="mic" class="mic" aria-label="Atombohy na ajanony ny resaka">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V22h2v-3.08A7 7 0 0 0 19 12h-2Z"/></svg>
       </button>
+      <div id="level" class="level" hidden><div id="level-bar"></div></div>
       <div id="rec-state" class="rec-state">Vonona — tsindrio ny mikrô</div>
+      <button id="hf-stop" class="hf-stop" type="button" hidden>⏹ Ajanony ny resaka</button>
       <div id="wake" class="wake" hidden>👆 Tsindrio na aiza na aiza indray mandeha: hiresaka indray i Kahie</div>
       <details class="say-help">
         <summary>Inona no azoko lazaina?</summary>

@@ -1,5 +1,7 @@
 """Kahie API — FastAPI. Serves the PWA from /frontend and the agent endpoints under /api."""
 import json
+import logging
+import shutil
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -13,6 +15,13 @@ from .numbers_mg import speakify
 
 app = FastAPI(title="Kahie", version="0.1.0")
 app.include_router(tts.router)   # /api/speak — optional server voice
+
+_log = logging.getLogger("uvicorn.error")
+_log.info("[kahie] backend=%s  ear1=%s  ear2=%s  tts=%s  ffmpeg=%s", config.BACKEND, config.EAR1_MODE,
+          "on" if config.EAR2_ON else "off", "gemini" if tts.enabled() else "phone", bool(shutil.which("ffmpeg")))
+if config.BACKEND != "mock" and config.EAR1_MODE != "voice_transcribe":
+    _log.warning("[kahie] EAR1_MODE=%s — set EAR1_MODE=voice_transcribe in .env (dedicated ASR, better on short answers)",
+                 config.EAR1_MODE)
 conn = db.connect()
 db.init(conn)
 db.seed_demo(conn)
@@ -31,7 +40,9 @@ class Confirm(BaseModel):
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "backend": config.BACKEND, "tts": "server" if tts.enabled() else "phone"}
+    return {"ok": True, "backend": config.BACKEND, "tts": "server" if tts.enabled() else "phone",
+            "ffmpeg": shutil.which("ffmpeg") is not None,
+            "ear1": config.EAR1_MODE, "ear2": "spark-audio" if config.EAR2_ON else "off"}   # without ffmpeg the ears get no audio
 
 
 @app.post("/api/voice")

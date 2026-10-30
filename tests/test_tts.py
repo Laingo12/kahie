@@ -37,3 +37,13 @@ def test_text_is_capped(monkeypatch):
     monkeypatch.setattr(tts, "synthesize", lambda t: seen.setdefault("t", t) and tts.pcm_to_wav(b"\x00\x00"))
     r = tts.speak(tts.SpeakRequest(text="a" * 5000))
     assert len(seen["t"]) == tts.MAX_CHARS and r["mime"] == "audio/wav"
+
+
+@pytest.mark.parametrize("text, said", [
+    ("Mbola manana trosa i Rabe", "Mbola manana tchosa i Rabe"),
+    ("Andry nitrosa", "Andjy nitchosa"),
+    ("Tratra ny fandrosoana", "Tchatcha ny fandjosoana"),
+    ("Eny sa tsia?", "Eny sa tsia?"),
+])
+def test_tr_and_dr_are_respelled_for_the_voice(text, said):
+    assert tts.pronounce_mg(text) == said

@@ -100,3 +100,16 @@ def test_transcribe_routes_to_voice_transcribe(monkeypatch):
     monkeypatch.setattr(config, "VT_LANGUAGE_BIAS", [])
     out = models_client.transcribe(b"webm", "audio/webm", ["vary"])
     assert out["source"] == "voice-transcribe" and len(calls) == 1
+
+
+def test_words_only_in_turns_are_kept(monkeypatch):
+    calls = []
+    _setup(monkeypatch, calls, body={"sessionId": "s2", "transcript": "", "audioDurationMs": 2000,
+                                     "turns": [{"transcript": "Rabe naka"}, {"text": "telo kapoaka vary"}]})
+    assert models_client.voice_transcribe(b"webm")["text"] == "Rabe naka telo kapoaka vary"
+
+
+def test_empty_transcript_stays_empty(monkeypatch):
+    calls = []
+    _setup(monkeypatch, calls, body={"sessionId": "s3", "transcript": "", "audioDurationMs": 2000, "turns": []})
+    assert models_client.voice_transcribe(b"webm")["text"] == ""
